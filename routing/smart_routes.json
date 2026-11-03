@@ -1,0 +1,336 @@
+{
+  "total_distance_m": 23378,
+  "routes": [
+    {
+      "truck": 0,
+      "stops": [
+        0,
+        0
+      ],
+      "distance_m": 0,
+      "load_l": 0
+    },
+    {
+      "truck": 1,
+      "stops": [
+        0,
+        53,
+        36,
+        6,
+        27,
+        52,
+        5,
+        35,
+        54,
+        11,
+        41,
+        24,
+        22,
+        48,
+        47,
+        29,
+        32,
+        49,
+        34,
+        2,
+        13,
+        45,
+        3,
+        40,
+        26,
+        10,
+        25,
+        0
+      ],
+      "distance_m": 11320,
+      "load_l": 7982
+    },
+    {
+      "truck": 2,
+      "stops": [
+        0,
+        17,
+        7,
+        58,
+        39,
+        20,
+        46,
+        38,
+        19,
+        8,
+        60,
+        33,
+        28,
+        14,
+        12,
+        55,
+        31,
+        42,
+        51,
+        16,
+        18,
+        21,
+        43,
+        15,
+        23,
+        30,
+        56,
+        4,
+        0
+      ],
+      "distance_m": 12058,
+      "load_l": 7975
+    }
+  ],
+  "skipped": [
+    "bin_000",
+    "bin_008",
+    "bin_036",
+    "bin_043",
+    "bin_049",
+    "bin_056",
+    "bin_058"
+  ],
+  "predictions": {
+    "bin_000": {
+      "predicted_fill_24h": 0.67,
+      "hours_to_full": 41.9
+    },
+    "bin_001": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 10.7
+    },
+    "bin_002": {
+      "predicted_fill_24h": 0.89,
+      "hours_to_full": 32.6
+    },
+    "bin_003": {
+      "predicted_fill_24h": 0.66,
+      "hours_to_full": 42.2
+    },
+    "bin_004": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 9.0
+    },
+    "bin_005": {
+      "predicted_fill_24h": 0.43,
+      "hours_to_full": 117.0
+    },
+    "bin_006": {
+      "predicted_fill_24h": 0.61,
+      "hours_to_full": 77.4
+    },
+    "bin_007": {
+      "predicted_fill_24h": 0.74,
+      "hours_to_full": 37.7
+    },
+    "bin_008": {
+      "predicted_fill_24h": 0.45,
+      "hours_to_full": 80.4
+    },
+    "bin_009": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 13.0
+    },
+    "bin_010": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 14.6
+    },
+    "bin_011": {
+      "predicted_fill_24h": 0.72,
+      "hours_to_full": 58.3
+    },
+    "bin_012": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 20.4
+    },
+    "bin_013": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 11.1
+    },
+    "bin_014": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 19.5
+    },
+    "bin_015": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 11.3
+    },
+    "bin_016": {
+      "predicted_fill_24h": 0.89,
+      "hours_to_full": 37.6
+    },
+    "bin_017": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 16.8
+    },
+    "bin_018": {
+      "predicted_fill_24h": 0.97,
+      "hours_to_full": 25.2
+    },
+    "bin_019": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 2.4
+    },
+    "bin_020": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 9.9
+    },
+    "bin_021": {
+      "predicted_fill_24h": 0.94,
+      "hours_to_full": 25.3
+    },
+    "bin_022": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 16.9
+    },
+    "bin_023": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 3.0
+    },
+    "bin_024": {
+      "predicted_fill_24h": 0.63,
+      "hours_to_full": 48.4
+    },
+    "bin_025": {
+      "predicted_fill_24h": 0.73,
+      "hours_to_full": 36.8
+    },
+    "bin_026": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 2.8
+    },
+    "bin_027": {
+      "predicted_fill_24h": 0.78,
+      "hours_to_full": 31.1
+    },
+    "bin_028": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 20.2
+    },
+    "bin_029": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 2.1
+    },
+    "bin_030": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 17.1
+    },
+    "bin_031": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 23.2
+    },
+    "bin_032": {
+      "predicted_fill_24h": 0.49,
+      "hours_to_full": 89.7
+    },
+    "bin_033": {
+      "predicted_fill_24h": 0.92,
+      "hours_to_full": 30.8
+    },
+    "bin_034": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 17.1
+    },
+    "bin_035": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 20.4
+    },
+    "bin_036": {
+      "predicted_fill_24h": 0.5,
+      "hours_to_full": 61.0
+    },
+    "bin_037": {
+      "predicted_fill_24h": 0.49,
+      "hours_to_full": 82.3
+    },
+    "bin_038": {
+      "predicted_fill_24h": 0.85,
+      "hours_to_full": 30.7
+    },
+    "bin_039": {
+      "predicted_fill_24h": 0.48,
+      "hours_to_full": 81.3
+    },
+    "bin_040": {
+      "predicted_fill_24h": 0.88,
+      "hours_to_full": 29.6
+    },
+    "bin_041": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 7.8
+    },
+    "bin_042": {
+      "predicted_fill_24h": 0.83,
+      "hours_to_full": 29.4
+    },
+    "bin_043": {
+      "predicted_fill_24h": 0.6,
+      "hours_to_full": 55.3
+    },
+    "bin_044": {
+      "predicted_fill_24h": 0.49,
+      "hours_to_full": 70.1
+    },
+    "bin_045": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 20.6
+    },
+    "bin_046": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 6.1
+    },
+    "bin_047": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 20.4
+    },
+    "bin_048": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 1.7
+    },
+    "bin_049": {
+      "predicted_fill_24h": 0.78,
+      "hours_to_full": 34.6
+    },
+    "bin_050": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 4.0
+    },
+    "bin_051": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 16.3
+    },
+    "bin_052": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 3.1
+    },
+    "bin_053": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 15.4
+    },
+    "bin_054": {
+      "predicted_fill_24h": 0.62,
+      "hours_to_full": 47.1
+    },
+    "bin_055": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 15.4
+    },
+    "bin_056": {
+      "predicted_fill_24h": 0.9,
+      "hours_to_full": 26.1
+    },
+    "bin_057": {
+      "predicted_fill_24h": 0.76,
+      "hours_to_full": 33.3
+    },
+    "bin_058": {
+      "predicted_fill_24h": 0.33,
+      "hours_to_full": 122.6
+    },
+    "bin_059": {
+      "predicted_fill_24h": 1.0,
+      "hours_to_full": 16.1
+    }
+  }
+}
