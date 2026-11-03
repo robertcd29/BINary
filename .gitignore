@@ -1,0 +1,4 @@
+.env
+venv/
+ghene.db
+__pycache__/
