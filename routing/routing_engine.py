@@ -51,7 +51,56 @@ def _matrix(graph_nodes):
     return M
 
 
-def plan_routes(bins, history=None):
+def _solve(M, demands, penalties, capacity):
+    """VRP cu capacitate. penalties = {index: penalitate} pentru pubelele optionale."""
+    manager = pywrapcp.RoutingIndexManager(len(M), NUM_TRUCKS, 0)
+    routing = pywrapcp.RoutingModel(manager)
+    transit = routing.RegisterTransitCallback(
+        lambda a, b: int(M[manager.IndexToNode(a)][manager.IndexToNode(b)]))
+    routing.SetArcCostEvaluatorOfAllVehicles(transit)
+    demand_idx = routing.RegisterUnaryTransitCallback(
+        lambda a: demands[manager.IndexToNode(a)])
+    routing.AddDimensionWithVehicleCapacity(
+        demand_idx, 0, [capacity] * NUM_TRUCKS, True, "Capacity")
+    for node, penalty in penalties.items():
+        routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+
+    params = pywrapcp.DefaultRoutingSearchParameters()
+    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    params.time_limit.FromSeconds(SOLVER_SECONDS)
+    solution = routing.SolveWithParameters(params)
+    if solution is None:
+        return None
+
+    routes, total, visited = [], 0, set()
+    for v in range(NUM_TRUCKS):
+        idx, stops, dist, load = routing.Start(v), [], 0, 0
+        while not routing.IsEnd(idx):
+            node = manager.IndexToNode(idx)
+            stops.append(node)
+            visited.add(node)
+            load += demands[node]
+            nxt = solution.Value(routing.NextVar(idx))
+            dist += routing.GetArcCostForVehicle(idx, nxt, v)
+            idx = nxt
+        stops.append(0)
+        total += dist
+        routes.append({"truck": v, "stops": stops, "distance_m": dist, "load_l": load})
+    return routes, total, visited
+
+
+def _geometry(stop_nodes):
+    """Coordonatele [lat, lng] ale strazilor parcurse intre opriri, pentru desenat pe harta."""
+    coords = []
+    for a, b in zip(stop_nodes, stop_nodes[1:]):
+        path = nx.shortest_path(_G, a, b, weight="length")
+        pts = [[_G.nodes[n]["y"], _G.nodes[n]["x"]] for n in path]
+        coords.extend(pts if not coords else pts[1:])
+    return coords
+
+
+def plan_routes(bins, history=None, compare_baseline=False):
     history = history or {}
     warnings = []
 
@@ -71,17 +120,7 @@ def plan_routes(bins, history=None):
     demands = [0] + [round(f * b.get("capacitate_l", DEFAULT_BIN_CAPACITY_L))
                      for f, b in zip(fills, used)]
 
-    manager = pywrapcp.RoutingIndexManager(len(ids), NUM_TRUCKS, 0)
-    routing = pywrapcp.RoutingModel(manager)
-    transit = routing.RegisterTransitCallback(
-        lambda a, b: int(M[manager.IndexToNode(a)][manager.IndexToNode(b)]))
-    routing.SetArcCostEvaluatorOfAllVehicles(transit)
-    demand_idx = routing.RegisterUnaryTransitCallback(
-        lambda a: demands[manager.IndexToNode(a)])
-    routing.AddDimensionWithVehicleCapacity(
-        demand_idx, 0, [int(TRUCK_CAPACITY_L * (1 - RESERVE))] * NUM_TRUCKS, True, "Capacity")
-
-    predictions = {}
+    predictions, penalties, overflow_risk = {}, {}, set()
     for node, (b, fill) in enumerate(zip(used, fills), start=1):
         rate, hours_to_full = estimate(history.get(b["id"], []))
         predictions[b["id"]] = {
@@ -89,39 +128,42 @@ def plan_routes(bins, history=None):
             "predicted_fill_24h": round(min(1.0, fill + (rate or 0) * HORIZON_H), 2),
         }
         will_overflow = hours_to_full is not None and hours_to_full <= HORIZON_H
+        if will_overflow:
+            overflow_risk.add(node)
         if fill >= MANDATORY_FILL or will_overflow:
             continue
-        routing.AddDisjunction([manager.NodeToIndex(node)], int(PENALTY_SCALE * fill**2))
+        penalties[node] = int(PENALTY_SCALE * fill**2)
 
-    params = pywrapcp.DefaultRoutingSearchParameters()
-    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    params.time_limit.FromSeconds(SOLVER_SECONDS)
-    solution = routing.SolveWithParameters(params)
-    if solution is None:
+    capacity = int(TRUCK_CAPACITY_L * (1 - RESERVE))
+    solved = _solve(M, demands, penalties, capacity)
+    if solved is None:
         return {"error": "Nicio solutie: prea mult gunoi obligatoriu pentru capacitatea camioanelor",
                 "warnings": warnings}
+    routes, total, visited = solved
+    for r in routes:
+        r["stops"] = [ids[i] for i in r["stops"]]
+        r["geometry"] = _geometry([graph_nodes[ids.index(s_)] for s_ in r["stops"]])
 
-    routes, total, visited = [], 0, set()
-    for v in range(NUM_TRUCKS):
-        idx, stops, dist, load = routing.Start(v), [], 0, 0
-        while not routing.IsEnd(idx):
-            node = manager.IndexToNode(idx)
-            stops.append(ids[node])
-            visited.add(node)
-            load += demands[node]
-            nxt = solution.Value(routing.NextVar(idx))
-            dist += routing.GetArcCostForVehicle(idx, nxt, v)
-            idx = nxt
-        stops.append("depot")
-        total += dist
-        routes.append({"truck": v, "stops": stops, "distance_m": dist, "load_l": load})
+    metrics = {
+        "total_km": round(total / 1000, 2),
+        "trucks_used": sum(1 for r in routes if len(r["stops"]) > 2),
+        "bins_total": len(used),
+        "bins_collected": len(visited) - 1,
+        "bins_skipped": len(used) - (len(visited) - 1),
+        "overflows_prevented": len(overflow_risk & visited),
+    }
+    if compare_baseline:
+        base = _solve(M, demands, {}, TRUCK_CAPACITY_L)
+        if base is not None:
+            metrics["baseline_km"] = round(base[1] / 1000, 2)
+            metrics["saving_pct"] = round(100 * (1 - total / base[1]), 1)
 
     return {
         "total_distance_m": total,
         "routes": routes,
         "skipped": [ids[i] for i in range(1, len(ids)) if i not in visited],
         "predictions": predictions,
+        "metrics": metrics,
         "warnings": warnings,
         "_nodes": dict(zip(ids, graph_nodes)),   # intern: id -> nod din graf, pentru alerte
     }
@@ -153,9 +195,11 @@ def add_alert(plan, alert):
     extra, route, pos = best
     dedicated = len(route["stops"]) == 2
     route["stops"].insert(pos, alert["id"])
+    nodes[alert["id"]] = x
+    route["geometry"] = _geometry([nodes[s_] for s_ in route["stops"]])
     route["distance_m"] += int(extra)
     route["load_l"] += alert["volum_l"]
     plan["total_distance_m"] += int(extra)
-    nodes[alert["id"]] = x
+    plan["metrics"]["total_km"] = round(plan["total_distance_m"] / 1000, 2)
     return {"alert": alert["id"], "truck": route["truck"], "extra_m": int(extra),
             "dedicated_trip": dedicated}

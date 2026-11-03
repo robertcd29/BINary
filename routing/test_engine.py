@@ -16,12 +16,12 @@ bins += [{"id": "TM-001", "lat": 45.7489, "lng": 21.2087, "umplere": 73},
          {"id": "TM-002", "lat": 45.7537, "lng": 21.2257, "umplere": 41},
          {"id": "TM-003", "lat": 45.7601, "lng": 21.2290, "umplere": 90}]
 
-plan = routing_engine.plan_routes(bins, history)
+plan = routing_engine.plan_routes(bins, history, compare_baseline=True)
 for w in plan["warnings"]:
     print("ATENTIE:", w)
 for r in plan["routes"]:
     print(f"Camion {r['truck']}: {len(r['stops']) - 2} opriri, {r['distance_m'] / 1000:.1f} km, {r['load_l']} L")
-print(f"Total: {plan['total_distance_m'] / 1000:.1f} km, sarite: {len(plan['skipped'])}")
+print("Metrici:", plan["metrics"])
 
 print(routing_engine.add_alert(plan, {"id": "AL-1", "lat": 45.7475, "lng": 21.2395, "volum_l": 500}))
 
