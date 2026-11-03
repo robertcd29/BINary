@@ -5,6 +5,7 @@ from predict import estimate
 
 NUM_TRUCKS = 3
 TRUCK_CAPACITY_L = 8000
+RESERVE = 0.10           # 10% din capacitate ramane libera pentru alerte
 MANDATORY_FILL = 0.8      # peste acest nivel, pubela trebuie golita azi
 HORIZON_H = 24            # urmatoarea colectare e peste 24 de ore
 PENALTY_SCALE = 4000
@@ -33,7 +34,7 @@ def demand_cb(from_index):
 
 demand_idx = routing.RegisterUnaryTransitCallback(demand_cb)
 routing.AddDimensionWithVehicleCapacity(
-    demand_idx, 0, [TRUCK_CAPACITY_L] * NUM_TRUCKS, True, "Capacity")
+    demand_idx, 0, [int(TRUCK_CAPACITY_L * (1 - RESERVE))] * NUM_TRUCKS, True, "Capacity")
 
 predictions, mandatory_by_forecast = {}, 0
 for node, b in enumerate(bins, start=1):
