@@ -29,6 +29,7 @@ MANDATORY_PENALTY = 10_000_000   # "obligatoriu": sarirea costa cat 10.000 km
 DEFAULT_BIN_CAPACITY_L = 1100
 MAX_SNAP_M = 300                 # peste aceasta distanta, punctul e in afara hartii
 SOLVER_SECONDS = 3               # suficient pentru ~60 de pubele; 30 pentru cifre de pitch
+BASELINE_SECONDS = 10            # referinta se calculeaza rar, deci isi permite mai mult timp
 ALERT_SIZES_L = {"mica": 100, "medie": 500, "mare": 1500}   # raportari de la cetateni
 
 _G = ox.load_graphml(GRAPH_FILE)
@@ -212,10 +213,12 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         "mandatory_unserved": len(unserved),
     }
     if compare_baseline:
-        key = tuple(zip(ids, demands))          # acelasi set de date => acelasi baseline
+        # referinta = colectarea tuturor pubelelor; o calculam o data pentru acelasi set de pubele,
+        # ca procentul de economie sa nu sara de la o planificare la alta din cauza solver-ului
+        key = tuple(ids)
         if key not in _baseline_cache:
             base = _solve(M, demands, {i: MANDATORY_PENALTY for i in range(1, len(ids))},
-                          TRUCK_CAPACITY_L, seconds)
+                          TRUCK_CAPACITY_L, max(seconds, BASELINE_SECONDS))
             _baseline_cache[key] = base[1]
         metrics["baseline_km"] = round(_baseline_cache[key] / 1000, 2)
         metrics["saving_pct"] = round(100 * (1 - total / _baseline_cache[key]), 1)
@@ -232,10 +235,24 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     }
 
 
-def add_alert(plan, alert):
+def insertion_cost(plan, lat, lng, volume_l=0):
+    """Cati metri in plus ar costa sa adaugi un punct in cea mai buna ruta (None daca nu incape)."""
+    x, off = _snap(lat, lng)
+    if off > MAX_SNAP_M:
+        return None
+    nodes, to_x, from_x = plan["_nodes"], _to(x), _from(x)[0]
+    costs = [to_x[nodes[s[k]]] + from_x[nodes[s[k + 1]]] - _dist(nodes[s[k]], nodes[s[k + 1]])
+             for r in plan["routes"] if r["load_l"] + volume_l <= TRUCK_CAPACITY_L
+             for s in [r["stops"]] for k in range(len(s) - 1)]
+    return int(min(costs)) if costs else None
+
+
+def add_alert(plan, alert, kind="alert"):
     """alert = {"id", "lat", "lng"} plus "volum_l" (camera) sau "marime": mica/medie/mare (cetatean).
 
-    Modifica planul pe loc. Daca niciun camion nu are loc, alerta ramane "pending"
+    kind="alert" pentru depozitari ilegale, kind="bin" pentru o pubela sarita care a devenit
+    urgenta in timpul zilei (camioanele sunt deja pe drum, deci nu refacem tot planul).
+    Modifica planul pe loc. Daca niciun camion nu are loc, punctul ramane "pending"
     pentru urmatoarea planificare, in loc sa dea eroare.
     """
     volume = alert.get("volum_l")
@@ -261,7 +278,8 @@ def add_alert(plan, alert):
             if best is None or extra < best[0]:
                 best = (extra, r, k + 1)
 
-    result = {"id": alert["id"], "lat": alert["lat"], "lng": alert["lng"], "volum_l": volume}
+    result = {"id": alert["id"], "kind": kind, "lat": alert["lat"], "lng": alert["lng"],
+              "volum_l": volume}
     if best is None:
         result.update(status="pending", reason="niciun camion nu mai are loc azi")
         plan["alerts"].append(result)
@@ -276,7 +294,14 @@ def add_alert(plan, alert):
     route["distance_m"] += int(extra)
     route["load_l"] += volume
     plan["total_distance_m"] += int(extra)
-    plan["metrics"]["total_km"] = round(plan["total_distance_m"] / 1000, 2)
+    m = plan["metrics"]
+    m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
+    if "baseline_km" in m:
+        m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
     result.update(status="assigned", truck=route["truck"], extra_m=int(extra), dedicated_trip=dedicated)
     plan["alerts"].append(result)
+    if kind == "bin" and alert["id"] in plan["skipped"]:
+        plan["skipped"].remove(alert["id"])
+        plan["metrics"]["bins_collected"] += 1
+        plan["metrics"]["bins_skipped"] -= 1
     return result

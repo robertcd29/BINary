@@ -6,7 +6,7 @@ ca sa nu poata inventa cifre. Daca API-ul nu e disponibil, se foloseste un text 
 import os
 import time
 
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 
 def _facts(plan, bins):
@@ -20,6 +20,8 @@ def _facts(plan, bins):
     for r in plan["routes"]:
         bins_on_route = [s for s in r["stops"] if s in by_id]
         alerts = [s for s in r["stops"] if s != "depot" and s not in by_id]
+        bins_on_route = [s for s in bins_on_route
+                         if s not in {a["id"] for a in plan.get("alerts", [])}]
         if not bins_on_route and not alerts:
             facts.append(f"Camionul {r['truck']} ramane in depozit: nu e nevoie de el azi.")
             continue
@@ -39,12 +41,14 @@ def _facts(plan, bins):
                       f"ar costa mai mult decat merita azi; nu are inca istoric de masuratori")
         facts.append(f"Pubela {s} e sarita azi: {reason}.")
     for a in plan.get("alerts", []):
+        what = ("Pubela " + a["id"] + ", care a devenit urgenta in timpul zilei,"
+                if a.get("kind") == "bin" else "Depozitarea ilegala " + a["id"])
         if a.get("status") != "assigned":
-            facts.append(f"Depozitarea ilegala {a['id']} asteapta: {a.get('reason', 'neasignata')}.")
+            facts.append(f"{what} asteapta: {a.get('reason', 'neasignata')}.")
             continue
         how = ("cu o cursa separata din depozit" if a["dedicated_trip"]
                else f"cu un ocol de {a['extra_m']} m pe ruta existenta")
-        facts.append(f"Depozitarea ilegala {a['id']} e preluata de camionul {a['truck']} {how}.")
+        facts.append(f"{what} e preluata de camionul {a['truck']} {how}.")
     for w in plan.get("warnings", []):
         if "obligatorii" in w:
             facts.append(w + ".")
