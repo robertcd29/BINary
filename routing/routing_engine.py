@@ -201,5 +201,8 @@ def add_alert(plan, alert):
     route["load_l"] += alert["volum_l"]
     plan["total_distance_m"] += int(extra)
     plan["metrics"]["total_km"] = round(plan["total_distance_m"] / 1000, 2)
-    return {"alert": alert["id"], "truck": route["truck"], "extra_m": int(extra),
-            "dedicated_trip": dedicated}
+    result = {"id": alert["id"], "lat": alert["lat"], "lng": alert["lng"],
+              "volum_l": alert["volum_l"], "truck": route["truck"],
+              "extra_m": int(extra), "dedicated_trip": dedicated}
+    plan.setdefault("alerts", []).append(result)
+    return result

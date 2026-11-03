@@ -1706,8 +1706,19 @@
     "bins_collected": 54,
     "bins_skipped": 9,
     "overflows_prevented": 31,
-    "baseline_km": 33.75,
-    "saving_pct": 18.0
+    "baseline_km": 34.16,
+    "saving_pct": 19.0
   },
-  "warnings": []
+  "warnings": [],
+  "alerts": [
+    {
+      "id": "AL-1",
+      "lat": 45.7475,
+      "lng": 21.2395,
+      "volum_l": 500,
+      "truck": 0,
+      "extra_m": 0,
+      "dedicated_trip": false
+    }
+  ]
 }
