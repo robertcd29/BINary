@@ -4,6 +4,7 @@ Faptele (km, pubele, motive) le calculeaza codul nostru. Gemini doar le formulea
 ca sa nu poata inventa cifre. Daca API-ul nu e disponibil, se foloseste un text simplu.
 """
 import os
+import time
 
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -38,9 +39,15 @@ def _facts(plan, bins):
                       f"ar costa mai mult decat merita azi; nu are inca istoric de masuratori")
         facts.append(f"Pubela {s} e sarita azi: {reason}.")
     for a in plan.get("alerts", []):
+        if a.get("status") != "assigned":
+            facts.append(f"Depozitarea ilegala {a['id']} asteapta: {a.get('reason', 'neasignata')}.")
+            continue
         how = ("cu o cursa separata din depozit" if a["dedicated_trip"]
                else f"cu un ocol de {a['extra_m']} m pe ruta existenta")
         facts.append(f"Depozitarea ilegala {a['id']} e preluata de camionul {a['truck']} {how}.")
+    for w in plan.get("warnings", []):
+        if "obligatorii" in w:
+            facts.append(w + ".")
     return facts
 
 
@@ -60,13 +67,19 @@ def explain_plan(plan, bins):
         "nu adauga cifre sau nume de strazi care nu apar in ele.\n\nFapte:\n- "
         + "\n- ".join(facts)
     )
-    try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
-        return response.text.strip()
-    except Exception as e:                     # fara internet, cheie gresita, model indisponibil
-        return _fallback(facts) + f"\n(explicatie fara Gemini: {e.__class__.__name__})"
+    last_error = None
+    for attempt in range(3):                   # erorile 5xx de la Google sunt de obicei temporare
+        try:
+            from google import genai
+            client = genai.Client(api_key=api_key)
+            response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
+            return response.text.strip()
+        except Exception as e:                 # fara internet, cheie gresita, model indisponibil
+            last_error = e
+            if "ServerError" not in e.__class__.__name__:
+                break                          # eroare care nu trece singura: nu mai incercam
+            time.sleep(2 * (attempt + 1))
+    return _fallback(facts) + f"\n(explicatie fara Gemini: {last_error})"
 
 
 if __name__ == "__main__":
