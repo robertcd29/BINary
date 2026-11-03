@@ -1,0 +1,353 @@
+{
+  "total_distance_m": 27668,
+  "routes": [
+    {
+      "truck": 0,
+      "stops": [
+        "depot",
+        "bin_044",
+        "bin_004",
+        "bin_034",
+        "bin_041",
+        "bin_050",
+        "bin_015",
+        "bin_017",
+        "bin_054",
+        "bin_030",
+        "bin_051",
+        "bin_026",
+        "AL-1",
+        "bin_052",
+        "bin_055",
+        "bin_003",
+        "depot"
+      ],
+      "distance_m": 7580,
+      "load_l": 4647
+    },
+    {
+      "truck": 1,
+      "stops": [
+        "depot",
+        "bin_016",
+        "bin_031",
+        "bin_048",
+        "TM-002",
+        "bin_053",
+        "bin_010",
+        "bin_040",
+        "bin_023",
+        "bin_021",
+        "TM-003",
+        "bin_047",
+        "bin_046",
+        "bin_028",
+        "bin_033",
+        "bin_001",
+        "bin_012",
+        "depot"
+      ],
+      "distance_m": 8993,
+      "load_l": 6103
+    },
+    {
+      "truck": 2,
+      "stops": [
+        "depot",
+        "bin_002",
+        "bin_039",
+        "bin_025",
+        "bin_009",
+        "bin_024",
+        "bin_035",
+        "bin_014",
+        "bin_037",
+        "bin_018",
+        "bin_007",
+        "bin_059",
+        "bin_032",
+        "bin_027",
+        "bin_013",
+        "bin_011",
+        "bin_020",
+        "bin_042",
+        "bin_022",
+        "bin_029",
+        "bin_045",
+        "bin_019",
+        "bin_038",
+        "bin_057",
+        "bin_006",
+        "depot"
+      ],
+      "distance_m": 11095,
+      "load_l": 7078
+    }
+  ],
+  "skipped": [
+    "bin_000",
+    "bin_005",
+    "bin_008",
+    "bin_036",
+    "bin_043",
+    "bin_049",
+    "bin_056",
+    "bin_058",
+    "TM-001"
+  ],
+  "predictions": {
+    "bin_000": {
+      "hours_to_full": 41.9,
+      "predicted_fill_24h": 0.67
+    },
+    "bin_001": {
+      "hours_to_full": 10.7,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_002": {
+      "hours_to_full": 32.6,
+      "predicted_fill_24h": 0.89
+    },
+    "bin_003": {
+      "hours_to_full": 42.2,
+      "predicted_fill_24h": 0.66
+    },
+    "bin_004": {
+      "hours_to_full": 9.0,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_005": {
+      "hours_to_full": 117.0,
+      "predicted_fill_24h": 0.43
+    },
+    "bin_006": {
+      "hours_to_full": 77.4,
+      "predicted_fill_24h": 0.61
+    },
+    "bin_007": {
+      "hours_to_full": 37.7,
+      "predicted_fill_24h": 0.74
+    },
+    "bin_008": {
+      "hours_to_full": 80.4,
+      "predicted_fill_24h": 0.45
+    },
+    "bin_009": {
+      "hours_to_full": 13.0,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_010": {
+      "hours_to_full": 14.6,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_011": {
+      "hours_to_full": 58.3,
+      "predicted_fill_24h": 0.72
+    },
+    "bin_012": {
+      "hours_to_full": 20.4,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_013": {
+      "hours_to_full": 11.1,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_014": {
+      "hours_to_full": 19.5,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_015": {
+      "hours_to_full": 11.3,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_016": {
+      "hours_to_full": 37.6,
+      "predicted_fill_24h": 0.89
+    },
+    "bin_017": {
+      "hours_to_full": 16.8,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_018": {
+      "hours_to_full": 25.2,
+      "predicted_fill_24h": 0.97
+    },
+    "bin_019": {
+      "hours_to_full": 2.4,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_020": {
+      "hours_to_full": 9.9,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_021": {
+      "hours_to_full": 25.3,
+      "predicted_fill_24h": 0.94
+    },
+    "bin_022": {
+      "hours_to_full": 16.9,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_023": {
+      "hours_to_full": 3.0,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_024": {
+      "hours_to_full": 48.4,
+      "predicted_fill_24h": 0.63
+    },
+    "bin_025": {
+      "hours_to_full": 36.8,
+      "predicted_fill_24h": 0.73
+    },
+    "bin_026": {
+      "hours_to_full": 2.8,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_027": {
+      "hours_to_full": 31.1,
+      "predicted_fill_24h": 0.78
+    },
+    "bin_028": {
+      "hours_to_full": 20.2,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_029": {
+      "hours_to_full": 2.1,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_030": {
+      "hours_to_full": 17.1,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_031": {
+      "hours_to_full": 23.2,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_032": {
+      "hours_to_full": 89.7,
+      "predicted_fill_24h": 0.49
+    },
+    "bin_033": {
+      "hours_to_full": 30.8,
+      "predicted_fill_24h": 0.92
+    },
+    "bin_034": {
+      "hours_to_full": 17.1,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_035": {
+      "hours_to_full": 20.4,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_036": {
+      "hours_to_full": 61.0,
+      "predicted_fill_24h": 0.5
+    },
+    "bin_037": {
+      "hours_to_full": 82.3,
+      "predicted_fill_24h": 0.49
+    },
+    "bin_038": {
+      "hours_to_full": 30.7,
+      "predicted_fill_24h": 0.85
+    },
+    "bin_039": {
+      "hours_to_full": 81.3,
+      "predicted_fill_24h": 0.48
+    },
+    "bin_040": {
+      "hours_to_full": 29.6,
+      "predicted_fill_24h": 0.88
+    },
+    "bin_041": {
+      "hours_to_full": 7.8,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_042": {
+      "hours_to_full": 29.4,
+      "predicted_fill_24h": 0.83
+    },
+    "bin_043": {
+      "hours_to_full": 55.3,
+      "predicted_fill_24h": 0.6
+    },
+    "bin_044": {
+      "hours_to_full": 70.1,
+      "predicted_fill_24h": 0.49
+    },
+    "bin_045": {
+      "hours_to_full": 20.6,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_046": {
+      "hours_to_full": 6.1,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_047": {
+      "hours_to_full": 20.4,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_048": {
+      "hours_to_full": 1.7,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_049": {
+      "hours_to_full": 34.6,
+      "predicted_fill_24h": 0.78
+    },
+    "bin_050": {
+      "hours_to_full": 4.0,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_051": {
+      "hours_to_full": 16.3,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_052": {
+      "hours_to_full": 3.1,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_053": {
+      "hours_to_full": 15.4,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_054": {
+      "hours_to_full": 47.1,
+      "predicted_fill_24h": 0.62
+    },
+    "bin_055": {
+      "hours_to_full": 15.4,
+      "predicted_fill_24h": 1.0
+    },
+    "bin_056": {
+      "hours_to_full": 26.1,
+      "predicted_fill_24h": 0.9
+    },
+    "bin_057": {
+      "hours_to_full": 33.3,
+      "predicted_fill_24h": 0.76
+    },
+    "bin_058": {
+      "hours_to_full": 122.6,
+      "predicted_fill_24h": 0.33
+    },
+    "bin_059": {
+      "hours_to_full": 16.1,
+      "predicted_fill_24h": 1.0
+    },
+    "TM-001": {
+      "hours_to_full": null,
+      "predicted_fill_24h": 0.73
+    },
+    "TM-002": {
+      "hours_to_full": null,
+      "predicted_fill_24h": 0.41
+    },
+    "TM-003": {
+      "hours_to_full": null,
+      "predicted_fill_24h": 0.9
+    }
+  },
+  "warnings": []
+}
