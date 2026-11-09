@@ -360,3 +360,12 @@ def alerta_colectata(alert_id: str):
         if not found:
             raise HTTPException(404, "Alerta nu exista sau e deja colectata")
     return {"status": "ok"}
+
+
+@router.get("/pubele-fizice")
+def pubele_fizice():
+    """Pubelele reale din trashes, pentru harta din dashboard."""
+    with _connect() as conn:
+        if not _has_trashes(conn):
+            return []
+        return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
