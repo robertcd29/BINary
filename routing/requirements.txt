@@ -45,3 +45,9 @@ typing_extensions==4.16.0
 tzdata==2026.6
 urllib3==2.8.0
 websockets==17.4
+fastapi
+uvicorn
+psycopg[binary]
+python-dotenv
+pytest
+httpx

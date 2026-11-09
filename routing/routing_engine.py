@@ -9,6 +9,7 @@ Iesire: rute cu opriri identificate prin id ("depot" sau id-ul pubelei/alertei),
 geometria fiecarei rute, predictii, metrici si avertismente. Functiile nu arunca
 exceptii pentru date proaste: le raporteaza in "warnings", ca demo-ul sa nu pice.
 """
+import os
 from functools import lru_cache
 
 import numpy as np
@@ -17,7 +18,8 @@ import osmnx as ox
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from predict import estimate
 
-GRAPH_FILE = "timisoara_drive.graphml"
+# cale relativa la acest fisier, ca modulul sa mearga si cand serverul porneste din radacina repo-ului
+GRAPH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "timisoara_drive.graphml")
 DEPOT = {"lat": 45.7547817, "lng": 21.2506284}   # punctul de plecare al camioanelor
 NUM_TRUCKS = 3
 TRUCK_CAPACITY_L = 8000
