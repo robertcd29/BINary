@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>BINary</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: sans-serif;
+        }
+
+        #harta {
+            height: 100vh;
+        }
+
+        #panou {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
+            width: 220px;
+        }
+
+        #buton {
+            width: 100%;
+            padding: 10px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        #status {
+            margin-top: 8px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="harta"></div>
+    <div id="panou">
+        <button id="buton">Calculează rutele</button>
+        <div id="status">Se încarcă planul curent...</div>
+    </div>
+    <script>
+        const harta = L.map("harta").setView([45.7537, 21.2257], 13);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap"
+        }).addTo(harta);
+
+        const culori = ["#e63946", "#1d7fd6", "#2a9d48", "#f4a300"];
+        const strat = L.layerGroup().addTo(harta);
+        const buton = document.getElementById("buton");
+        const status = document.getElementById("status");
+
+        function deseneaza(plan) {
+            strat.clearLayers();
+            plan.routes.forEach((r, i) => {
+                L.polyline(r.geometry, { color: culori[i % culori.length], weight: 4 })
+                    .bindPopup(`Camion ${r.truck}: ${(r.distance_m / 1000).toFixed(1)} km, ${r.stops.length - 2} opriri`)
+                    .addTo(strat);
+            });
+            status.textContent = `${plan.routes.length} camioane, ${(plan.total_distance_m / 1000).toFixed(1)} km total`;
+        }
+
+        async function cere(metoda, url) {
+            const r = await fetch(url, { method: metoda });
+            if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+            return r.json();
+        }
+
+        buton.onclick = async () => {
+            buton.disabled = true;
+            status.textContent = "Se calculează...";
+            try {
+                deseneaza(await cere("POST", "/api/rute/planifica"));
+            } catch (e) {
+                status.textContent = "Eroare: " + e.message;
+            } finally {
+                buton.disabled = false;
+            }
+        };
+
+        cere("GET", "/api/rute").then(deseneaza)
+            .catch(e => status.textContent = "Eroare: " + e.message);
+    </script>
+</body>
+
+</html>

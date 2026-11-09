@@ -6,6 +6,7 @@ La pornire incepe sa urmareasca tabela trashes (senzorii reali, scrisi de backen
 """
 import threading
 from contextlib import asynccontextmanager
+from fastapi.staticfiles import StaticFiles
 
 from fastapi import FastAPI
 
@@ -22,3 +23,4 @@ async def lifespan(app):
 
 app = FastAPI(title="BINary - rutare", lifespan=lifespan)
 app.include_router(api.router)
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
