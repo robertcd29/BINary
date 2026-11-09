@@ -115,6 +115,8 @@ def test_imagine_bruta_de_la_esp32_cam(client):
 
 def test_replanificare_pastreaza_alertele_si_golirea(client):
     plan = client.post("/api/rute/planifica").json()
+    # cateva minute de citiri manuale nu trebuie sa dea predictii absurde
+    assert plan["predictions"]["bin_001"]["hours_to_full"] < 500
     stops = {s for r in plan["routes"] for s in r["stops"]}
     assert {"AL-0001", "AL-0002"} <= stops | {a["id"] for a in plan["alerts"] if a["status"] == "pending"}
     assert client.post("/api/pubele/bin_000/golita").json()["status"] == "ok"

@@ -44,6 +44,7 @@ CAMERAS = {"CAM-01": (45.73738, 21.23222)}   # la ~450 m de rute: in demo se ved
 DEFAULT_CAMERA = "CAM-01"
 DUMP_CLASSES = None             # None = orice clasa a modelului Dariei; altfel ex. {"gunoi"}
 HISTORY_SLOT = "1 minute"       # citirile se mediaza pe intervale, pentru regresie
+MIN_HISTORY_H = 1.0             # istoricul real conteaza doar daca acopera cel putin o ora
 CAPTURES = HERE / "captures"    # ultima poza de la fiecare camera
 
 router = APIRouter(prefix="/api")
@@ -128,7 +129,10 @@ def _current_bins(conn):
         WHERE c.ts >= coalesce(t.golita_la, '-infinity') GROUP BY c.bin_id""").fetchall()}
     db_hist = _db_history(conn)
     history = {k: v for k, v in _SIM_HISTORY.items()}
-    history.update({k: v for k, v in db_hist.items() if len(v) >= 3})
+    # cateva minute de citiri nu spun nimic despre rata de umplere (regresia iese plata si
+    # predictia "se umple in 8000 de ore"); pana se aduna o ora de date ramane istoricul simulat
+    history.update({k: v for k, v in db_hist.items()
+                    if len(v) >= 3 and v[-1]["t_h"] - v[0]["t_h"] >= MIN_HISTORY_H})
 
     now = datetime.now(timezone.utc)
     bins, surse = [], {}
