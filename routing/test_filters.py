@@ -61,31 +61,6 @@ def test_fara_nicio_citire_buna_e_vizitata():
 
 # ---------- depozitari ilegale ----------
 
-def test_confirmare_doar_dupa_cadre_consecutive():
-    c = dumping.FrameConfirmer(frames=3)
-    seq = [True, True, False, True, True, True, True, True]
-    assert [c.update("CAM-01", d) for d in seq] == [False, False, False, False, False, True, False, False]
-    # alta camera are numaratoarea ei
-    assert c.update("CAM-02", True) is False
-
-
-def test_detectii_slabe_sau_stricate_sunt_ignorate():
-    dets = [{"conf": 0.9, "bbox": [0, 0, 10, 10]},
-            {"conf": 0.2, "bbox": [0, 0, 10, 10]},
-            {"conf": 0.9},
-            {"conf": 0.8, "bbox": [0, 0, 5, 5], "clasa": "persoana"}]
-    assert len(dumping.relevant(dets)) == 2
-    assert len(dumping.relevant(dets, classes={"gunoi"})) == 0
-
-
-def test_marime_din_aria_acoperita():
-    box = lambda w, h: {"bbox": [0, 0, w, h]}
-    assert dumping.size_from_boxes([box(20, 20)], 160, 120) == "mica"     # 2%
-    assert dumping.size_from_boxes([box(60, 40)], 160, 120) == "medie"    # 12.5%
-    assert dumping.size_from_boxes([box(120, 90)], 160, 120) == "mare"    # 56%
-    assert dumping.size_from_boxes([box(10, 10)], 0, 0) == "medie"
-
-
 def test_deduplicare_pe_raza():
     open_alerts = [{"id": "AL-1", "lat": 45.7475, "lng": 21.2395},
                    {"id": "AL-2", "lat": 45.7600, "lng": 21.2300}]

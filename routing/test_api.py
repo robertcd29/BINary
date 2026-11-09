@@ -1,6 +1,6 @@
-"""Test cap-coada al serverului, cu payload-urile exacte trimise de sensors.ino si cam.ino.
+"""Test cap-coada: backend-ul (simulat aici) scrie in trashes, iar rutarea reactioneaza.
 
-ATENTIE: sterge si recreeaza tabelele din baza data in TEST_DATABASE_URL. Nu folosi baza de demo.
+ATENTIE: sterge si recreeaza tabelele din baza data in TEST_DATABASE_URL. Nu folosi baza echipei.
 Rulare, din folderul routing:
     createdb binary_test
     TEST_DATABASE_URL=postgresql://localhost/binary_test python -m pytest test_api.py -q
@@ -12,115 +12,99 @@ import pytest
 
 TEST_DB = os.environ.get("TEST_DATABASE_URL")
 pytestmark = pytest.mark.skipif(not TEST_DB, reason="seteaza TEST_DATABASE_URL")
+CAMERA = (45.73738, 21.23222)
 
 
 @pytest.fixture(scope="module")
 def client():
     with psycopg.connect(TEST_DB) as conn:
-        conn.execute("DROP TABLE IF EXISTS trashes, rutare_pubele, rutare_citiri, rutare_camere, rutare_alerte")
-        # tabela backend-ului, ca in server.py: trebuie doar citita
+        conn.execute("DROP TABLE IF EXISTS trashes, rutare_pubele, rutare_citiri, rutare_camere, "
+                     "rutare_golire, rutare_alerte")
+        # exact tabela si datele din server.py-ul lui Robert
         conn.execute("CREATE TABLE trashes (id TEXT PRIMARY KEY, lat DOUBLE PRECISION, "
                      "lng DOUBLE PRECISION, umplere INTEGER, actualizat TIMESTAMPTZ DEFAULT now())")
-        conn.execute("INSERT INTO trashes (id, lat, lng, umplere) VALUES ('TM-001', 45.7489, 21.2087, 73)")
+        conn.execute("INSERT INTO trashes (id, lat, lng, umplere) VALUES "
+                     "('TM-001', 45.7489, 21.2087, 73), ('TM-002', 45.7537, 21.2257, 41)")
+        # TM-003 nu a mai trimis nimic de 2 ore
+        conn.execute("INSERT INTO trashes VALUES ('TM-003', 45.7601, 21.2290, 90, now() - interval '2 hours')")
     os.environ["DATABASE_URL"] = TEST_DB
     from fastapi.testclient import TestClient
     import main
-    return TestClient(main.app)
+    return TestClient(main.app)       # fara "with": bucla de fundal nu porneste, apelam poll_once direct
 
 
-def firmware_json(a, b, c):
-    """Exact stringul construit de sendData() din sensors.ino."""
-    return f'{{"bin1":{a:.1f},"bin2":{b:.1f},"bin3":{c:.1f}}}'
+def robert(bin_id, value):
+    """Ce face backend-ul cand primeste o valoare de la senzor."""
+    with psycopg.connect(TEST_DB) as conn:
+        conn.execute("UPDATE trashes SET umplere = %s, actualizat = now() WHERE id = %s", (value, bin_id))
+    import api
+    return api.poll_once()
 
 
-def post_sensors(client, a, b, c):
-    r = client.post("/api/sensors", content=firmware_json(a, b, c),
-                    headers={"Content-Type": "application/json"})
-    assert r.status_code == 200, r.text
-    return r.json()
-
-
-def test_trashes_e_doar_citita(client):
-    plan = client.get("/api/rute").json()
-    stops = {s for r in plan["routes"] for s in r["stops"]} | set(plan["skipped"])
-    assert {"TM-001", "bin_000", "bin_059"} <= stops
+def trashes_snapshot():
     with psycopg.connect(TEST_DB) as conn:
         cols = [r[0] for r in conn.execute("SELECT column_name FROM information_schema.columns "
                                            "WHERE table_name = 'trashes' ORDER BY ordinal_position")]
-        assert cols == ["id", "lat", "lng", "umplere", "actualizat"]
-        assert conn.execute("SELECT count(*) FROM trashes").fetchone()[0] == 1
+        return cols, conn.execute("SELECT count(*) FROM trashes").fetchone()[0]
 
 
-def test_fara_citiri_senzorul_e_necunoscut(client):
+def test_pubelele_lui_robert_intra_in_rute_si_trashes_ramane_neatinsa(client):
+    plan = client.get("/api/rute").json()
+    everywhere = {s for r in plan["routes"] for s in r["stops"]} | set(plan["skipped"])
+    assert {"TM-001", "TM-002", "TM-003", "bin_000"} <= everywhere
+    assert trashes_snapshot() == (["id", "lat", "lng", "umplere", "actualizat"], 3)
+
+
+def test_senzor_care_nu_mai_transmite_e_estimat(client):
     plan = client.post("/api/rute/planifica").json()
-    assert plan["surse"]["bin_000"]["sursa"] == "necunoscut"
-    assert any("bin_000" in w for w in plan["warnings"])
+    assert plan["surse"]["TM-002"]["sursa"] == "senzor"
+    assert plan["surse"]["TM-003"]["sursa"] == "estimat"
+    assert any(w.startswith("TM-003") for w in plan["warnings"])
 
 
-def test_mediana_si_float(client):
-    for a in (20.0, 21.5, 95.0, 20.5, 21.0):     # 95 = varf izolat
-        out = post_sensors(client, a, 15.0, 30.0)
-    assert out["pubele"]["bin1"]["umplere"] == 21
-    assert out["pubele"]["bin1"]["urgenta"] is False
+def test_golire_si_mediana(client):
+    robert("TM-001", 20)
+    events = robert("TM-001", 21)                 # doua valori mici la rand dupa 73 = golire
+    assert any(e["status"] == "golita" for e in events)
+    for v in (95, 20, 21):                        # 95 = varf izolat, nu golire si nu urgenta
+        assert not any(e["status"] in ("golita", "urgenta", "assigned") for e in robert("TM-001", v))
+    plan = client.post("/api/rute/planifica").json()
+    assert plan["surse"]["TM-001"]["umplere"] == 21
 
 
-def test_senzor_fara_raspuns_nu_devine_gol(client):
-    out = post_sensors(client, 21.0, 15.0, -1.0)      # valoare invalida (negativ sau null) = eroare de senzor
-    assert out["pubele"]["bin3"]["umplere"] == 30     # mediana citirilor bune ramane
+def test_o_singura_citire_zero_nu_e_golire(client):
+    for v in (60, 60, 60, 0, 60):
+        assert not any(e["status"] == "golita" for e in robert("TM-002", v))
 
 
 def test_pubela_urgenta_intra_o_singura_data_in_ruta(client):
     plan = client.post("/api/rute/planifica").json()
-    assert plan["surse"]["bin_000"]["sursa"] == "senzor"
-    skipped = [b for b in ("bin_000", "bin_001", "bin_002") if b in plan["skipped"]]
-    assert skipped, "nicio pubela fizica nu e sarita la umplere mica"
-    key = {"bin_000": "bin1", "bin_001": "bin2", "bin_002": "bin3"}[skipped[0]]
-
-    events = []
-    for level in (85, 86, 84, 79, 81, 78, 82, 85):   # oscileaza in jurul pragului
-        vals = {"bin1": 21.0, "bin2": 15.0, "bin3": 30.0, key: level}
-        events += post_sensors(client, vals["bin1"], vals["bin2"], vals["bin3"])["evenimente"]
-    inserted = [e for e in events if e.get("status") == "assigned"]
-    assert len(inserted) == 1 and inserted[0]["id"] == skipped[0]
-
+    assert "TM-001" in plan["skipped"], "TM-001 la 21% ar trebui sa fie sarita"
+    for v in (85, 86, 84, 79, 81, 78, 82, 85):    # oscileaza in jurul pragului
+        robert("TM-001", v)
     plan = client.get("/api/rute").json()
-    assert sum(skipped[0] in r["stops"] for r in plan["routes"]) == 1
+    inserted = [e for e in plan["evenimente"] if e["id"] == "TM-001" and e["status"] == "assigned"]
+    assert len(inserted) == 1
+    assert sum("TM-001" in r["stops"] for r in plan["routes"]) == 1
 
 
-def test_camera_confirma_dupa_trei_cadre(client):
-    frame = {"camera_id": "CAM-01", "latime": 160, "inaltime": 120,
-             "detectii": [{"clasa": "gunoi", "conf": 0.9, "bbox": [20, 20, 80, 70]}]}
-    statuses = [client.post("/api/detectii", json=frame).json()["status"] for _ in range(4)]
-    assert statuses[:2] == ["detectie", "detectie"]
-    assert statuses[2] == "assigned"
-    assert statuses[3] == "detectie"              # a patra poza nu mai creeaza alerta
-    alerts = client.get("/api/alerte").json()
-    assert len(alerts) == 1 and alerts[0]["marime"] == "medie" and alerts[0]["status"] == "asignata"
-
-
-def test_raportare_cetatean_deduplicata(client):
-    near = client.post("/api/alerte", json={"lat": 45.73765, "lng": 21.23222, "marime": "mare"}).json()
-    assert near["status"] == "duplicat"
-    far = client.post("/api/alerte", json={"lat": 45.7600, "lng": 21.2300}).json()
-    assert far["status"] in ("assigned", "pending")
+def test_alerta_de_la_camera_deduplicata(client):
+    first = client.post("/api/alerte", json={"lat": CAMERA[0], "lng": CAMERA[1], "sursa": "camera"}).json()
+    assert first["status"] == "assigned" and first["sursa"] == "camera"
+    for _ in range(3):                            # modelul detecteaza din nou la fiecare poza
+        again = client.post("/api/alerte", json={"lat": CAMERA[0], "lng": CAMERA[1], "sursa": "camera"}).json()
+        assert again["status"] == "duplicat" and again["id"] == first["id"]
     alerts = {a["id"]: a for a in client.get("/api/alerte").json()}
-    assert alerts[near["id"]]["nr_raportari"] == 2
+    assert alerts[first["id"]]["nr_raportari"] == 4 and alerts[first["id"]]["sursa"] == "camera"
 
 
-def test_imagine_bruta_de_la_esp32_cam(client):
-    r = client.post("/api/image", content=b"\xff\xd8\xff fake jpeg",
-                    headers={"Content-Type": "image/jpeg"})
-    assert r.status_code == 200 and r.json()["status"] in ("salvata", "nimic", "detectie")
-
-
-def test_replanificare_pastreaza_alertele_si_golirea(client):
+def test_replanificare_si_colectare(client):
     plan = client.post("/api/rute/planifica").json()
-    # cateva minute de citiri manuale nu trebuie sa dea predictii absurde
     assert plan["predictions"]["bin_001"]["hours_to_full"] < 500
-    stops = {s for r in plan["routes"] for s in r["stops"]}
-    assert {"AL-0001", "AL-0002"} <= stops | {a["id"] for a in plan["alerts"] if a["status"] == "pending"}
-    assert client.post("/api/pubele/bin_000/golita").json()["status"] == "ok"
+    assert "AL-0001" in {s for r in plan["routes"] for s in r["stops"]}
     assert client.post("/api/alerte/AL-0001/colectata").json()["status"] == "ok"
     plan = client.post("/api/rute/planifica").json()
     assert "AL-0001" not in {s for r in plan["routes"] for s in r["stops"]}
-    assert plan["surse"]["bin_000"]["umplere"] == 0
+    assert client.post("/api/pubele/bin_005/golita").json()["status"] == "ok"
+    assert client.post("/api/pubele/TM-001/golita").status_code == 404
+    assert trashes_snapshot()[1] == 3
