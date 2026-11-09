@@ -40,7 +40,7 @@ DATABASE_URL = os.environ["DATABASE_URL"]
 # cheile din JSON-ul trimis de sensors.ino -> pubelele marcate "physical" in bins.json
 SENSOR_MAP = {"bin1": "bin_000", "bin2": "bin_001", "bin3": "bin_002"}
 # unde "sta" fiecare camera; cam.ino nu trimite un id, deci primeste DEFAULT_CAMERA
-CAMERAS = {"CAM-01": (45.7475, 21.2395)}
+CAMERAS = {"CAM-01": (45.73738, 21.23222)}   # la ~450 m de rute: in demo se vede ocolul
 DEFAULT_CAMERA = "CAM-01"
 DUMP_CLASSES = None             # None = orice clasa a modelului Dariei; altfel ex. {"gunoi"}
 HISTORY_SLOT = "1 minute"       # citirile se mediaza pe intervale, pentru regresie
@@ -88,7 +88,8 @@ def init_db():
                 [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["capacity_l"])
                  for b in sim])
             cur.executemany(
-                "INSERT INTO rutare_camere (id, lat, lng) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING",
+                """INSERT INTO rutare_camere (id, lat, lng) VALUES (%s, %s, %s)
+                   ON CONFLICT (id) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng""",   # CAMERAS e sursa de adevar
                 [(cid, lat, lng) for cid, (lat, lng) in CAMERAS.items()])
 
 

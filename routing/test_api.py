@@ -99,7 +99,7 @@ def test_camera_confirma_dupa_trei_cadre(client):
 
 
 def test_raportare_cetatean_deduplicata(client):
-    near = client.post("/api/alerte", json={"lat": 45.74777, "lng": 21.2395, "marime": "mare"}).json()
+    near = client.post("/api/alerte", json={"lat": 45.73765, "lng": 21.23222, "marime": "mare"}).json()
     assert near["status"] == "duplicat"
     far = client.post("/api/alerte", json={"lat": 45.7600, "lng": 21.2300}).json()
     assert far["status"] in ("assigned", "pending")
