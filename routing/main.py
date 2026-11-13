@@ -23,4 +23,5 @@ async def lifespan(app):
 
 app = FastAPI(title="BINary - rutare", lifespan=lifespan)
 app.include_router(api.router)
+app.mount("/captures", StaticFiles(directory="captures", check_dir=False), name="captures")
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

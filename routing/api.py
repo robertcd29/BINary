@@ -21,13 +21,15 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
+import io
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))       # modulele din routing/ se importa intre ele fara pachet
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from PIL import Image
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 
@@ -36,6 +38,7 @@ import routing_engine as engine
 import sensor_filter as sf
 from explain import explain_plan
 from predict import estimate
+from filtru_gemini import verifica
 
 load_dotenv()
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -48,7 +51,9 @@ MAX_EVENTS = 50
 
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
-_state = {"plan": None, "bins": None, "surse": {}, "urgent": {}, "seen": None, "evenimente": []}
+_state = {"plan": None, "bins": None, "surse": {}, "urgent": {}, "seen": None, "evenimente": [],
+          "facute": set(),      # opririle bifate azi de soferi (pubele golite, depozitari colectate)
+          "pozitii": {}}        # ultima pozitie GPS a fiecarui camion; doar in memorie, nu in DB
 
 with open(HERE / "history.json") as f:
     _SIM_HISTORY = json.load(f)       # istoric simulat pentru pubelele simulate
@@ -80,6 +85,7 @@ def init_db():
             lat DOUBLE PRECISION, lng DOUBLE PRECISION, marime TEXT, volum_l INTEGER,
             nr_raportari INTEGER DEFAULT 1, status TEXT DEFAULT 'deschisa', camion INTEGER,
             creata TIMESTAMPTZ DEFAULT now(), inchisa TIMESTAMPTZ)""")
+        conn.execute("ALTER TABLE rutare_alerte ADD COLUMN IF NOT EXISTS descriere TEXT")
         with conn.cursor() as cur:
             cur.executemany(
                 """INSERT INTO rutare_pubele (id, lat, lng, umplere, capacitate_l)
@@ -162,6 +168,7 @@ def _poll(conn):
                             ON CONFLICT (bin_id) DO UPDATE SET golita_la = EXCLUDED.golita_la""",
                          (bid, emptied))
             _state["urgent"][bid] = False
+            _state["facute"].add(bid)
             events.append(_event({"id": bid, "status": "golita"}))
         conn.execute("INSERT INTO rutare_citiri (bin_id, umplere, ts) VALUES (%s, %s, %s)", (bid, value, ts))
         level = sf.smooth(_recent_levels(conn, bid))
@@ -253,7 +260,7 @@ def _build_plan(conn):
     for bid, s in surse.items():
         if s["sursa"] != "senzor":
             plan["warnings"].append(f"{bid}: {s['motiv']}")
-    _state.update(plan=plan, bins=bins, surse=surse)
+    _state.update(plan=plan, bins=bins, surse=surse, facute=set())
     # alertele inca necolectate (si cele venite inainte sa existe un plan) intra in planul nou
     for a in conn.execute("""SELECT * FROM rutare_alerte WHERE status IN ('deschisa', 'asignata')
                              ORDER BY creata""").fetchall():
@@ -326,6 +333,7 @@ def golita(bin_id: str):
         conn.execute("""INSERT INTO rutare_golire (bin_id, golita_la) VALUES (%s, now())
                         ON CONFLICT (bin_id) DO UPDATE SET golita_la = EXCLUDED.golita_la""", (bin_id,))
         _state["urgent"][bin_id] = False
+        _state["facute"].add(bin_id)
     return {"status": "ok"}
 
 
@@ -359,6 +367,7 @@ def alerta_colectata(alert_id: str):
                                 WHERE id = %s AND status <> 'colectata'""", (alert_id,)).rowcount
         if not found:
             raise HTTPException(404, "Alerta nu exista sau e deja colectata")
+        _state["facute"].add(alert_id)
     return {"status": "ok"}
 
 
@@ -369,3 +378,93 @@ def pubele_fizice():
         if not _has_trashes(conn):
             return []
         return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
+
+
+@router.get("/pubele")
+def toate_pubelele():
+    """Pubelele reale si cele simulate, cu umplerea curenta, pentru harta din dashboard."""
+    with _connect() as conn:
+        bins, _, surse = _current_bins(conn)
+    return [{**b, "reala": b["id"] in surse} for b in bins]
+
+
+# ---------- raportari de la cetateni (aplicatia lui Mihai) ----------
+
+CAPTURES = HERE / "captures"
+CAPTURES.mkdir(exist_ok=True)
+STATUS_APLICATIE = {"assigned": "pe_ruta", "duplicat": "duplicat"}
+
+
+@router.post("/rapoarte")
+def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
+    """Gemini verifica poza; daca e gunoi, intra ca orice alerta (duplicate, inserare in ruta)."""
+    try:
+        imagine = Image.open(io.BytesIO(poza.file.read())).convert("RGB")
+    except Exception:
+        raise HTTPException(400, "Fișierul trimis nu e o imagine")
+    try:
+        verdict = verifica(imagine)     # in afara lock-ului: Gemini raspunde in 1-3 secunde
+    except Exception:
+        raise HTTPException(503, "Verificarea pozei nu merge acum, încearcă din nou")
+    if not verdict["e_gunoi"]:
+        return {"acceptat": False, "motiv": verdict["descriere"]}
+
+    with _lock, _connect() as conn:
+        r = _register_alert(conn, "cetatean", lat, lng, verdict["marime"])
+        if r["status"] != "duplicat":   # la duplicat ramane descrierea primului raport
+            conn.execute("UPDATE rutare_alerte SET descriere = %s WHERE id = %s",
+                         (verdict["descriere"], r["id"]))
+    cale = CAPTURES / f"{r['id']}.jpg"
+    if not cale.exists():
+        imagine.save(cale, "JPEG")
+    return {"acceptat": True, "descriere": verdict["descriere"],
+            "alerta": {"id": r["id"], "status": STATUS_APLICATIE.get(r["status"], "deschisa")}}
+
+
+# ---------- soferi (aplicatia lui Mihai) ----------
+
+@router.get("/ruta/{camion}")
+def ruta_camion(camion: int):
+    """Ruta zilei pentru un camion, cu coordonatele fiecarei opriri, in ordinea in care le ia."""
+    with _lock:
+        plan = _state["plan"]
+        if plan is None:
+            raise HTTPException(404, "Nu exista inca un plan al zilei. Dispecerul apasa Planifica pe dashboard.")
+        ruta = next((r for r in plan["routes"] if r["truck"] == camion), None)
+        if ruta is None:
+            raise HTTPException(404, f"Camionul {camion} nu are ruta azi")
+        pubele = {b["id"]: b for b in _state["bins"] or []}
+        alerte = {a["id"]: a for a in plan["alerts"]}
+        opriri = []
+        for sid in ruta["stops"]:
+            if sid == "depot":
+                continue
+            if sid in alerte and alerte[sid].get("kind") == "alert":
+                a = alerte[sid]
+                opriri.append({"id": sid, "tip": "depozitare", "lat": a["lat"], "lng": a["lng"],
+                               "facuta": sid in _state["facute"]})
+            elif sid in pubele:
+                b = pubele[sid]
+                opriri.append({"id": sid, "tip": "pubela", "lat": b["lat"], "lng": b["lng"],
+                               "umplere": b["umplere"], "facuta": sid in _state["facute"]})
+        return {"camion": camion, "distanta_m": ruta["distance_m"], "opriri": opriri,
+                "traseu": ruta["geometry"]}
+
+
+class Pozitie(BaseModel):
+    camion: int
+    lat: float
+    lng: float
+
+
+@router.post("/pozitie")
+def pozitie(p: Pozitie):
+    """Aplicatia soferului o trimite periodic; dashboard-ul o citeste din GET /pozitii."""
+    _state["pozitii"][p.camion] = {"camion": p.camion, "lat": p.lat, "lng": p.lng,
+                                   "la": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+    return {"status": "ok"}
+
+
+@router.get("/pozitii")
+def pozitii():
+    return list(_state["pozitii"].values())

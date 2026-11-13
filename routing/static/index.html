@@ -1,116 +1,686 @@
 <!doctype html>
-<html>
+<html lang="ro">
 
 <head>
     <meta charset="utf-8">
-    <title>BINary</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BINary · Dispecerat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body {
-            margin: 0;
-            font-family: sans-serif;
+        /* Stilul comun BINary (acelasi si in aplicatia lui Mihai) */
+        :root {
+            --asfalt: #23302a;
+            /* text, iconite */
+            --asfalt-2: #5d6b63;
+            /* text secundar */
+            --hartie: #eef1ec;
+            /* fundal */
+            --panou: #ffffff;
+            --linie: #d9dfd9;
+            --vesta: #ff6a13;
+            /* actiunea principala + depozitari ilegale */
+            --ok: #2f8f5b;
+            /* pubela sub 60% */
+            --atentie: #e3a21a;
+            /* 60-85% */
+            --plin: #c73e2a;
+            /* peste 85% */
+            --font: "Barlow", system-ui, sans-serif;
+            --font-cifre: "Barlow Condensed", "Barlow", system-ui, sans-serif;
         }
 
-        #harta {
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            height: 100%;
+        }
+
+        body {
+            font-family: var(--font);
+            font-size: 15px;
+            line-height: 1.45;
+            color: var(--asfalt);
+            background: var(--hartie);
+            display: grid;
+            grid-template-columns: 1fr 380px;
             height: 100vh;
         }
 
-        #panou {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            z-index: 1000;
-            background: white;
-            padding: 12px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, .3);
-            width: 220px;
+        button {
+            font: inherit;
         }
 
-        #buton {
+        :focus-visible {
+            outline: 3px solid var(--vesta);
+            outline-offset: 2px;
+        }
+
+        /* ---------- harta ---------- */
+        #harta {
+            height: 100%;
+            background: #dfe4de;
+        }
+
+        .leaflet-container {
+            font-family: var(--font);
+        }
+
+        /* harta de fundal in gri, ca pubelele si rutele sa iasa in fata */
+        .leaflet-tile-pane {
+            filter: grayscale(1) contrast(.85) brightness(1.06);
+        }
+
+        .legenda {
+            background: var(--panou);
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--linie);
+            font-size: 13px;
+            line-height: 1.9;
+        }
+
+        .legenda .rand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* pubela ca indicator de umplere: elementul care se tine minte */
+        .pubela {
+            width: 14px;
+            height: 19px;
+            border: 2px solid var(--asfalt);
+            border-radius: 2px 2px 4px 4px;
+            background: var(--panou);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pubela::before {
+            /* capacul */
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--asfalt);
+            z-index: 1;
+        }
+
+        .pubela i {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        .pubela.reala {
+            box-shadow: 0 0 0 3px var(--panou), 0 0 0 5px var(--asfalt);
+        }
+
+        .depozitare {
+            width: 16px;
+            height: 16px;
+            background: var(--vesta);
+            border: 2px solid var(--asfalt);
+            transform: rotate(45deg);
+        }
+
+        .depozitare.colectata {
+            background: var(--panou);
+        }
+
+        .depou {
+            width: 22px;
+            height: 22px;
+            background: var(--asfalt);
+            color: var(--panou);
+            border-radius: 4px;
+            display: grid;
+            place-items: center;
+            font: 700 13px var(--font-cifre);
+        }
+
+        .depozitare-poza {
+            display: block;
+            width: 220px;
+            height: 140px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-top: 6px;
+        }
+
+        /* ---------- panoul lateral ---------- */
+        aside {
+            background: var(--panou);
+            border-left: 1px solid var(--linie);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        header {
+            padding: 20px 22px 16px;
+        }
+
+        .marca {
+            font: 700 30px/1 var(--font-cifre);
+            letter-spacing: -0.01em;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .marca .pubela {
+            width: 18px;
+            height: 24px;
+        }
+
+        .azi {
+            color: var(--asfalt-2);
+            margin: 6px 0 0;
+        }
+
+        .rezumat {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border-top: 1px solid var(--linie);
+            border-bottom: 1px solid var(--linie);
+        }
+
+        .rezumat div {
+            padding: 12px 22px;
+        }
+
+        .rezumat div+div {
+            border-left: 1px solid var(--linie);
+        }
+
+        .rezumat b {
+            display: block;
+            font: 600 28px/1.05 var(--font-cifre);
+        }
+
+        .rezumat span {
+            font-size: 13px;
+            color: var(--asfalt-2);
+        }
+
+        .rezumat .alarma b {
+            color: var(--plin);
+        }
+
+        .actiune {
+            padding: 16px 22px;
+        }
+
+        #planifica {
             width: 100%;
-            padding: 10px;
-            font-size: 15px;
+            padding: 13px 16px;
+            border: 0;
+            border-radius: 6px;
+            background: var(--vesta);
+            color: #1a1205;
+            font-weight: 600;
+            font-size: 16px;
             cursor: pointer;
         }
 
+        #planifica:hover {
+            background: #ff7d33;
+        }
+
+        #planifica:disabled {
+            opacity: .6;
+            cursor: progress;
+        }
+
         #status {
-            margin-top: 8px;
+            margin: 8px 0 0;
             font-size: 13px;
+            color: var(--asfalt-2);
+            min-height: 1.45em;
+        }
+
+        #status.eroare {
+            color: var(--plin);
+        }
+
+        .derulare {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 0;
+        }
+
+        section {
+            padding: 4px 22px 18px;
+        }
+
+        h2 {
+            font: 600 19px/1.2 var(--font-cifre);
+            margin: 12px 0 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+
+        h2 small {
+            font: 400 13px var(--font);
+            color: var(--asfalt-2);
+        }
+
+        ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .camion {
+            display: grid;
+            grid-template-columns: 6px 1fr auto;
+            gap: 4px 12px;
+            padding: 10px 0;
+            border-top: 1px solid var(--linie);
+        }
+
+        .camion .culoare {
+            grid-row: span 2;
+            border-radius: 3px;
+        }
+
+        .camion b {
+            font-weight: 600;
+        }
+
+        .camion .km {
+            font: 600 18px/1 var(--font-cifre);
+            text-align: right;
+        }
+
+        .camion .detalii {
+            grid-column: 2 / 4;
+            font-size: 13px;
+            color: var(--asfalt-2);
+        }
+
+        .raport {
+            display: grid;
+            grid-template-columns: 64px 1fr;
+            gap: 12px;
+            padding: 12px 0;
+            border-top: 1px solid var(--linie);
+            cursor: pointer;
+            width: 100%;
+            text-align: left;
+            background: none;
+            border-left: 0;
+            border-right: 0;
+            border-bottom: 0;
+            color: inherit;
+        }
+
+        .raport:hover .titlu {
+            text-decoration: underline;
+        }
+
+        .raport .miniatura {
+            width: 64px;
+            height: 64px;
+            border-radius: 4px;
+            object-fit: cover;
+            background: var(--hartie);
+            display: grid;
+            place-items: center;
+            font: 600 13px var(--font-cifre);
+            color: var(--asfalt-2);
+        }
+
+        .raport .titlu {
+            font-weight: 600;
+        }
+
+        .raport p {
+            margin: 2px 0 6px;
+            font-size: 14px;
+        }
+
+        .eticheta {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 99px;
+            background: var(--hartie);
+        }
+
+        .eticheta.asignata {
+            background: #fff0e6;
+            color: #a8410a;
+        }
+
+        .eticheta.colectata {
+            background: #e5f2ea;
+            color: var(--ok);
+        }
+
+        .eticheta.respinsa {
+            background: #f8e5e2;
+            color: var(--plin);
+        }
+
+        .cand {
+            font-size: 12px;
+            color: var(--asfalt-2);
+            margin-left: 6px;
+        }
+
+        .gol {
+            color: var(--asfalt-2);
+            font-size: 14px;
+            padding: 10px 0;
+            border-top: 1px solid var(--linie);
+        }
+
+        @media (max-width: 860px) {
+            body {
+                grid-template-columns: 1fr;
+                grid-template-rows: 55vh auto;
+                height: auto;
+            }
+
+            aside {
+                border-left: 0;
+                border-top: 1px solid var(--linie);
+            }
+
+            .derulare {
+                overflow: visible;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                transition: none !important;
+                animation: none !important;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div id="harta"></div>
-    <div id="panou">
-        <button id="buton">Calculează rutele</button>
-        <div id="status">Se încarcă planul curent...</div>
-    </div>
+    <div id="harta" role="application" aria-label="Harta pubelelor și a rutelor"></div>
+
+    <aside>
+        <header>
+            <h1 class="marca"><span class="pubela" aria-hidden="true"><i
+                        style="height:70%;background:var(--vesta)"></i></span>BINary</h1>
+            <p class="azi" id="azi">Timișoara</p>
+        </header>
+
+        <div class="rezumat" aria-live="polite">
+            <div class="alarma"><b id="nr-pline">–</b><span>pubele peste 85%</span></div>
+            <div><b id="nr-depozitari">–</b><span>depozitări de ridicat</span></div>
+            <div><b id="km-total">–</b><span>km planificați</span></div>
+        </div>
+
+        <div class="actiune">
+            <button id="planifica">Planifică rutele de azi</button>
+            <p id="status" role="status">Se încarcă planul curent…</p>
+        </div>
+
+        <div class="derulare">
+            <section>
+                <h2>Camioane <small id="nr-camioane"></small></h2>
+                <ul id="camioane"></ul>
+            </section>
+            <section>
+                <h2>Depozitări ilegale <small>cele mai noi sus</small></h2>
+                <ul id="rapoarte"></ul>
+            </section>
+        </div>
+    </aside>
+
     <script>
-        const harta = L.map("harta").setView([45.7537, 21.2257], 13);
+        const REIMPROSPATARE_MS = 10000;
+        const CULORI_CAMIOANE = ["#2563c9", "#7a3fb0", "#0f8a8a", "#b5487a", "#5b6b1f"];
+        const STARE = {
+            deschisa: "În așteptare",
+            asignata: "Pe rută",
+            colectata: "Colectată",
+            respinsa: "Nu încape azi",
+        };
+
+        // ---------- harta ----------
+        const harta = L.map("harta", { zoomControl: false }).setView([45.7537, 21.2257], 13);
+        L.control.zoom({ position: "topleft" }).addTo(harta);
         L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap"
+            attribution: "© OpenStreetMap", maxZoom: 19,
         }).addTo(harta);
 
-        const culori = ["#e63946", "#1d7fd6", "#2a9d48", "#f4a300"];
-        const strat = L.layerGroup().addTo(harta);
-        const buton = document.getElementById("buton");
-        const status = document.getElementById("status");
+        const stratRute = L.layerGroup().addTo(harta);
+        const stratPubele = L.layerGroup().addTo(harta);
+        const stratDepozitari = L.layerGroup().addTo(harta);
+        const markeriDepozitari = {};
+        let primaIncarcare = true;
 
-        async function deseneaza(plan) {
-            strat.clearLayers();
-            plan.routes.forEach((r, i) => {
-                L.polyline(r.geometry, { color: culori[i % culori.length], weight: 4 })
-                    .bindPopup(`Camion ${r.truck}: ${(r.distance_m / 1000).toFixed(1)} km, ${r.stops.length - 2} opriri`)
-                    .addTo(strat);
-            });
+        const legenda = L.control({ position: "bottomleft" });
+        legenda.onAdd = () => {
+            const d = L.DomUtil.create("div", "legenda");
+            d.innerHTML = `
+                <div class="rand"><span class="pubela"><i style="height:35%;background:var(--ok)"></i></span>Pubelă, umplere sub 60%</div>
+                <div class="rand"><span class="pubela"><i style="height:72%;background:var(--atentie)"></i></span>60–85%</div>
+                <div class="rand"><span class="pubela"><i style="height:92%;background:var(--plin)"></i></span>Peste 85%</div>
+                <div class="rand"><span class="pubela reala" style="margin:0 3px"><i style="height:50%;background:var(--ok)"></i></span>Cu senzor real</div>
+                <div class="rand"><span class="depozitare" style="margin:0 2px"></span>Depozitare ilegală</div>`;
+            return d;
+        };
+        legenda.addTo(harta);
 
-            const fizice = await cere("GET", "/api/pubele-fizice");
-            fizice.forEach(p => {
-                const i = plan.routes.findIndex(r => r.stops.includes(p.id));
-                const culoare = i === -1 ? "#777" : culori[i % culori.length];
-                const unde = i === -1 ? "pe nicio rută" : `camion ${plan.routes[i].truck}`;
-                L.circleMarker([p.lat, p.lng], { radius: 10, color: "#000", weight: 2, fillColor: culoare, fillOpacity: 1 })
-                    .bindTooltip(`${p.id}: ${p.umplere}% — ${unde}`, { permanent: true, direction: "right" })
-                    .addTo(strat);
-            });
-            plan.alerts.filter(a => a.kind === "alert").forEach(a => {
-                const i = plan.routes.findIndex(r => r.truck === a.truck);
-                const culoare = a.status === "assigned" ? culori[i % culori.length] : "#777";
-                const patrat = L.divIcon({
-                    className: "",
-                    html: `<div style="width:14px;height:14px;background:${culoare};border:2px solid #000"></div>`,
-                    iconSize: [18, 18]
-                });
-                L.marker([a.lat, a.lng], { icon: patrat })
-                    .bindTooltip(`${a.id}: depozitare ilegală, ${a.volum_l} L — ${a.status === "assigned" ? "camion " + a.truck : a.status}`)
-                    .addTo(strat);
-            });
-            status.textContent = `${plan.routes.length} camioane, ${(plan.total_distance_m / 1000).toFixed(1)} km total`;
+        function culoareUmplere(p) {
+            return p >= 85 ? "var(--plin)" : p >= 60 ? "var(--atentie)" : "var(--ok)";
         }
 
+        function iconPubela(umplere, reala) {
+            const p = Math.max(0, Math.min(100, Math.round(umplere ?? 0)));
+            return L.divIcon({
+                className: "",
+                html: `<div class="pubela${reala ? " reala" : ""}"><i style="height:${p}%;background:${culoareUmplere(p)}"></i></div>`,
+                iconSize: [14, 19], iconAnchor: [7, 19], tooltipAnchor: [8, -10],
+            });
+        }
+
+        // ---------- date ----------
         async function cere(metoda, url) {
             const r = await fetch(url, { method: metoda });
-            if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+            if (!r.ok) throw new Error(`${r.status} la ${url}`);
             return r.json();
         }
 
+        async function pubele() {
+            try {
+                return await cere("GET", "/api/pubele");          // toate pubelele (reale + simulate)
+            } catch {
+                return (await cere("GET", "/api/pubele-fizice")).map(p => ({ ...p, reala: true }));
+            }
+        }
+
+        function element(tag, clasa, text) {
+            const e = document.createElement(tag);
+            if (clasa) e.className = clasa;
+            if (text !== undefined) e.textContent = text;
+            return e;
+        }
+
+        function timpTrecut(iso) {
+            const min = Math.round((Date.now() - new Date(iso)) / 60000);
+            if (min < 1) return "acum";
+            if (min < 60) return `acum ${min} min`;
+            const ore = Math.round(min / 60);
+            return ore < 24 ? `acum ${ore} h` : new Date(iso).toLocaleDateString("ro-RO");
+        }
+
+        const numeCamion = t => `Camion ${t + 1}`;
+
+        // ---------- desenare ----------
+        function deseneazaRute(plan) {
+            stratRute.clearLayers();
+            plan.routes.forEach((r, i) => {
+                const culoare = CULORI_CAMIOANE[i % CULORI_CAMIOANE.length];
+                L.polyline(r.geometry, { color: "#fff", weight: 8, opacity: .9 }).addTo(stratRute);
+                L.polyline(r.geometry, { color: culoare, weight: 4 })
+                    .bindTooltip(`${numeCamion(r.truck)}: ${(r.distance_m / 1000).toFixed(1)} km`, { sticky: true })
+                    .addTo(stratRute);
+            });
+            const depou = plan.routes[0]?.geometry[0];
+            if (depou) {
+                L.marker(depou, { icon: L.divIcon({ className: "", html: '<div class="depou">D</div>', iconSize: [22, 22] }) })
+                    .bindTooltip("Depoul, de aici pleacă toate camioanele").addTo(stratRute);
+            }
+
+            const lista = document.getElementById("camioane");
+            lista.replaceChildren();
+            plan.routes.forEach((r, i) => {
+                const li = element("li", "camion");
+                const bara = element("span", "culoare");
+                bara.style.background = CULORI_CAMIOANE[i % CULORI_CAMIOANE.length];
+                const opriri = r.stops.filter(s => s !== "depot").length;
+                li.append(bara, element("b", "", numeCamion(r.truck)),
+                    element("span", "km", `${(r.distance_m / 1000).toFixed(1)} km`),
+                    element("span", "detalii", `${opriri} opriri, ${Math.round(r.load_l).toLocaleString("ro-RO")} L de ridicat`));
+                lista.append(li);
+            });
+            document.getElementById("nr-camioane").textContent = `${plan.routes.length} pe traseu`;
+            document.getElementById("km-total").textContent = (plan.total_distance_m / 1000).toFixed(1);
+        }
+
+        function deseneazaPubele(lista) {
+            stratPubele.clearLayers();
+            lista.forEach(p => {
+                L.marker([p.lat, p.lng ?? p.lon], { icon: iconPubela(p.umplere, p.reala) })
+                    .bindTooltip(`${p.id}: ${Math.round(p.umplere ?? 0)}%${p.reala ? ", senzor real" : ""}`)
+                    .addTo(stratPubele);
+            });
+            document.getElementById("nr-pline").textContent = lista.filter(p => p.umplere >= 85).length;
+        }
+
+        function deseneazaDepozitari(alerte) {
+            stratDepozitari.clearLayers();
+            const lista = document.getElementById("rapoarte");
+            lista.replaceChildren();
+            const deRidicat = alerte.filter(a => a.status !== "colectata");
+            document.getElementById("nr-depozitari").textContent = deRidicat.length;
+
+            if (!alerte.length) {
+                lista.append(element("li", "gol", "Nicio depozitare raportată azi. Rapoartele cetățenilor și ale camerelor apar aici."));
+                return;
+            }
+
+            alerte.forEach(a => {
+                const dinCetatean = a.sursa === "cetatean";
+                const titlu = dinCetatean ? "Raportată de un cetățean" : `Camera ${a.camera_id ?? ""}`.trim();
+                const stare = a.status === "asignata" && a.camion != null
+                    ? `Pe ruta camionului ${a.camion + 1}` : (STARE[a.status] ?? a.status);
+
+                // marker pe harta
+                const m = L.marker([a.lat, a.lng], {
+                    icon: L.divIcon({ className: "", html: `<div class="depozitare${a.status === "colectata" ? " colectata" : ""}"></div>`, iconSize: [16, 16] }),
+                }).addTo(stratDepozitari);
+                const popup = element("div");
+                popup.append(element("b", "", `${titlu} (${a.id})`), element("div", "", stare));
+                if (a.descriere) popup.append(element("div", "", a.descriere));
+                if (dinCetatean) {
+                    const img = element("img", "depozitare-poza");
+                    img.src = `/captures/${a.id}.jpg`;
+                    img.alt = "Poza trimisă de cetățean";
+                    img.onerror = () => img.remove();
+                    popup.append(img);
+                }
+                m.bindPopup(popup);
+                markeriDepozitari[a.id] = m;
+
+                // rand in lista
+                const li = element("li");
+                const buton = element("button", "raport");
+                buton.onclick = () => { harta.flyTo([a.lat, a.lng], 16); m.openPopup(); };
+                let mini;
+                if (dinCetatean) {
+                    mini = element("img", "miniatura");
+                    mini.src = `/captures/${a.id}.jpg`;
+                    mini.alt = "";
+                    mini.onerror = () => mini.replaceWith(element("span", "miniatura", "Fără poză"));
+                } else {
+                    mini = element("span", "miniatura", "Cameră");
+                }
+                const text = element("div");
+                const rand = element("div");
+                rand.append(element("span", `eticheta ${a.status}`, stare), element("span", "cand", timpTrecut(a.creata)));
+                text.append(element("div", "titlu", titlu));
+                text.append(element("p", "", a.descriere || `Mărime estimată: ${a.marime ?? "medie"}`
+                    + (a.nr_raportari > 1 ? `, raportată de ${a.nr_raportari} ori` : "")));
+                text.append(rand);
+                buton.append(mini, text);
+                li.append(buton);
+                lista.append(li);
+            });
+        }
+
+        // ---------- reimprospatare ----------
+        async function actualizeaza(plan) {
+            const [p, alerte, planCurent] = await Promise.all([
+                pubele(), cere("GET", "/api/alerte"), plan ? Promise.resolve(plan) : cere("GET", "/api/rute"),
+            ]);
+            deseneazaRute(planCurent);
+            deseneazaPubele(p);
+            deseneazaDepozitari(alerte);
+            if (primaIncarcare && p.length) {
+                harta.fitBounds(p.map(x => [x.lat, x.lng ?? x.lon]), { padding: [40, 40] });
+                primaIncarcare = false;
+            }
+            const ora = new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+            seteazaStatus(`Actualizat la ${ora}. Se reîmprospătează singur.`);
+        }
+
+        function seteazaStatus(text, eroare = false) {
+            const s = document.getElementById("status");
+            s.textContent = text;
+            s.classList.toggle("eroare", eroare);
+        }
+
+        const buton = document.getElementById("planifica");
         buton.onclick = async () => {
             buton.disabled = true;
-            status.textContent = "Se calculează...";
+            seteazaStatus("Se calculează rutele, durează câteva secunde…");
             try {
-                deseneaza(await cere("POST", "/api/rute/planifica"));
+                await actualizeaza(await cere("POST", "/api/rute/planifica"));
+                seteazaStatus("Rutele de azi sunt planificate.");
             } catch (e) {
-                status.textContent = "Eroare: " + e.message;
+                seteazaStatus(`Rutele nu s-au putut calcula (${e.message}). Verifică dacă serverul de rutare rulează.`, true);
             } finally {
                 buton.disabled = false;
             }
         };
 
-        cere("GET", "/api/rute").then(deseneaza)
-            .catch(e => status.textContent = "Eroare: " + e.message);
+        function porneste() {
+            if (document.querySelector(".leaflet-popup")) return;   // nu inchidem popup-ul pe care il citeste cineva
+            actualizeaza().catch(e =>
+                seteazaStatus(`Nu primesc date de la server (${e.message}). Reîncerc în 10 secunde.`, true));
+        }
+
+        document.getElementById("azi").textContent = "Timișoara, " +
+            new Date().toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long" });
+        porneste();
+        setInterval(porneste, REIMPROSPATARE_MS);
     </script>
 </body>
 
