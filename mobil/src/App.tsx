@@ -469,7 +469,6 @@ export default function App() {
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
                 <MapFocus point={driverPosition} route={routePlan?.geometry ?? []} />
-                <NavLayer n={navigation} />
 
                 {routePlan && routePlan.geometry.length > 0 && (
                   <Polyline
@@ -497,6 +496,9 @@ export default function App() {
                     </Popup>
                   </CircleMarker>
                 ))}
+
+                {/* dupa traseul verde si opriri, ca etapa curenta (albastra) sa fie deasupra */}
+                <NavLayer n={navigation} />
 
                 {driverPosition && !navigation.started && (
                   <CircleMarker

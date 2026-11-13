@@ -339,19 +339,21 @@ button:disabled {
   height: calc(100vh - 150px);
   height: calc(100dvh - 150px);
   min-height: 360px;
-  perspective: 800px;
-  perspective-origin: 50% 0%;
+  perspective: 600px;
+  perspective-origin: 50% 30%;
+  /* cerul de la orizont, vizibil in vederea 3D deasupra hartii */
+  background: linear-gradient(#cfe0ee 0%, #e9f0ef 30%, #e7ece8 60%);
 }
 
 /* vederea 3D: harta e mai mare decat fereastra si culcata spre orizont, ca la Waze;
-   marimea acopera colturile de sus, care se micsoreaza in perspectiva */
+   latimea acopera marginile, care se strang in perspectiva, iar sus se vede cerul */
 .map-panel.tilted .leaflet-container {
   top: auto;
   bottom: 0;
-  left: -40%;
-  width: 180%;
-  height: 160%;
-  transform: rotateX(45deg);
+  left: -80%;
+  width: 260%;
+  height: 220%;
+  transform: rotateX(55deg);
 }
 
 .map-panel.tilted .leaflet-control-container {
@@ -365,10 +367,10 @@ button:disabled {
   top: 0;
   right: 0;
   left: 0;
-  height: 22%;
+  height: 34%;
   content: "";
   pointer-events: none;
-  background: linear-gradient(#f4f7f5, #f4f7f500);
+  background: linear-gradient(#d6e5f0 0%, #e4ece9cc 45%, #e7ece800);
 }
 
 .map-panel.tilted .map-viewport::after {
