@@ -513,6 +513,57 @@ def ruta_camion(camion: int):
                 "traseu": ruta["geometry"]}
 
 
+@router.get("/navigatie/{camion}")
+def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
+    """Ca un GPS: drumul pas cu pas spre fiecare oprire ramasa, apoi inapoi la depou.
+
+    lat/lng = pozitia curenta a soferului; fara ele, pornim de la ultima oprire facuta (sau depou).
+    etape[i] duce la opriri[i]; ultima etapa duce la depou.
+    """
+    with _lock:
+        plan = _state["plan"]
+        if plan is None:
+            raise HTTPException(404, "Nu exista inca un plan al zilei. Dispecerul apasa Planifica pe dashboard.")
+        ruta = next((r for r in plan["routes"] if r["truck"] == camion), None)
+        if ruta is None:
+            raise HTTPException(404, f"Camionul {camion} nu are ruta azi")
+        pubele = {b["id"]: b for b in _state["bins"] or []}
+        alerte = {a["id"]: a for a in plan["alerts"]}
+        facute = set(_state["facute"])
+        stops = [s for s in ruta["stops"] if s != "depot"]
+    with _connect() as conn:
+        info = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
+            if _has_trashes(conn) else {}
+
+    depou = (engine.DEPOT["lat"], engine.DEPOT["lng"])
+    opriri, start = [], depou
+    for sid in stops:
+        if sid in alerte and alerte[sid].get("kind") == "alert":
+            a = alerte[sid]
+            o = {"id": sid, "tip": "depozitare", "nume": "Depozitare ilegală", "adresa": None,
+                 "lat": float(a["lat"]), "lng": float(a["lng"])}
+        elif sid in pubele:
+            b, r = pubele[sid], info.get(sid, {})
+            o = {"id": sid, "tip": "pubela", "nume": r.get("nume") or sid, "adresa": r.get("adresa"),
+                 "lat": float(b["lat"]), "lng": float(b["lng"]), "umplere": b["umplere"]}
+        else:
+            continue
+        if sid in facute:
+            start = (o["lat"], o["lng"])     # ultima oprire facuta: de aici pleaca soferul
+        else:
+            opriri.append(o)
+    if lat is not None and lng is not None:
+        start = (lat, lng)
+    opriri.append({"id": "depot", "tip": "depou", "nume": "depou", "adresa": None,
+                   "lat": depou[0], "lng": depou[1]})
+
+    etape, prev = [], start
+    for o in opriri:
+        etape.append(engine.etapa_navigatie(prev, (o["lat"], o["lng"]), o["nume"]))
+        prev = (o["lat"], o["lng"])
+    return {"camion": camion, "opriri": opriri, "etape": etape}
+
+
 class Pozitie(BaseModel):
     camion: int
     lat: float

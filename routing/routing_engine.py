@@ -91,6 +91,107 @@ def _geometry(stop_nodes, stop_points=None):
     return coords
 
 
+# ---------- navigatie pas cu pas, pentru aplicatia soferului ----------
+
+def _m(a, b):
+    """Distanta aproximativa in metri intre doua puncte [lat, lng] (suficient la scara unui oras)."""
+    dy = (a[0] - b[0]) * 111_320
+    dx = (a[1] - b[1]) * 111_320 * np.cos(np.radians(a[0]))
+    return float(np.hypot(dx, dy))
+
+
+def _bearing(a, b):
+    """Directia de mers de la a la b, in grade (0 = nord, 90 = est)."""
+    la1, la2 = np.radians(a[0]), np.radians(b[0])
+    dl = np.radians(b[1] - a[1])
+    x = np.sin(dl) * np.cos(la2)
+    y = np.cos(la1) * np.sin(la2) - np.sin(la1) * np.cos(la2) * np.cos(dl)
+    return float(np.degrees(np.arctan2(x, y)) % 360)
+
+
+def _edge_points(u, v):
+    """Forma reala a strazii dintre doua noduri (cu curbe), plus numele ei."""
+    d = min(_G.get_edge_data(u, v).values(), key=lambda e: e.get("length", 0))
+    a, b = [_G.nodes[u]["y"], _G.nodes[u]["x"]], [_G.nodes[v]["y"], _G.nodes[v]["x"]]
+    pts = [[y, x] for x, y in d["geometry"].coords] if "geometry" in d else [a, b]
+    if _m(pts[0], a) > _m(pts[-1], a):
+        pts.reverse()
+    name = d.get("name")
+    if isinstance(name, list):
+        name = name[0]
+    return pts, name or "strada fără nume"
+
+
+_VIRAJ = {"inainte": "Continuă înainte", "usor-dreapta": "Virează ușor la dreapta",
+          "dreapta": "Virează la dreapta", "usor-stanga": "Virează ușor la stânga",
+          "stanga": "Virează la stânga", "intoarcere": "Întoarce-te"}
+
+
+def _viraj(inainte, dupa):
+    d = (dupa - inainte + 540) % 360 - 180        # -180..180, pozitiv = spre dreapta
+    if abs(d) < 25:
+        return "inainte"
+    if abs(d) > 150:
+        return "intoarcere"
+    side = "dreapta" if d > 0 else "stanga"
+    return f"usor-{side}" if abs(d) < 50 else side
+
+
+def etapa_navigatie(start, dest, nume_dest):
+    """Drumul de la start la dest ([lat, lng]) cu instructiuni de condus, ca un GPS.
+
+    Intoarce {"geometrie", "distanta_m", "pasi"}; fiecare pas are "tip" (start, stanga, dreapta,
+    usor-*, inainte, intoarcere, sosire), "text", "strada", "la_m" (unde incepe, in metri de la
+    inceputul etapei), "lat"/"lng" (punctul manevrei) si "distanta_m" (cat tine pana la urmatorul pas).
+    """
+    a, _ = _snap(*start)
+    b, _ = _snap(*dest)
+    path = _from(a)[1].get(b) if a != b else [a]
+    if path is None:
+        raise ValueError("nu exista drum pe harta intre cele doua puncte")
+
+    # bucati de drum grupate pe strazi: fiecare schimbare de strada e o manevra
+    grupuri = []                                  # [nume, [puncte]]
+    for u, v in zip(path, path[1:]):
+        pts, name = _edge_points(u, v)
+        if grupuri and grupuri[-1][0] == name:
+            grupuri[-1][1].extend(pts[1:])
+        else:
+            grupuri.append([name, pts])
+    # bucatile scurte fara nume (benzi de viraj, intersectii) nu sunt manevre de anuntat
+    curat = []
+    for name, pts in grupuri:
+        scurt = sum(_m(p, q) for p, q in zip(pts, pts[1:])) < 40
+        if curat and (scurt and name == "strada fără nume" or curat[-1][0] == name):
+            curat[-1][1].extend(pts[1:])
+        else:
+            curat.append([name, pts])
+    grupuri = curat
+
+    coords = [list(start)]
+    pasi = []
+    for i, (name, pts) in enumerate(grupuri):
+        if i == 0:
+            tip, text = "start", f"Pornește pe {name}"
+        else:
+            prev = grupuri[i - 1][1]
+            tip = _viraj(_bearing(prev[-2], prev[-1]), _bearing(pts[0], pts[1]))
+            text = f"{_VIRAJ[tip]} pe {name}"
+        la = sum(_m(p, q) for p, q in zip(coords, coords[1:])) + _m(coords[-1], pts[0])
+        pasi.append({"tip": tip, "text": text, "strada": name, "la_m": round(la),
+                     "lat": pts[0][0], "lng": pts[0][1]})
+        coords.extend(pts)
+    coords.append(list(dest))
+    total = sum(_m(p, q) for p, q in zip(coords, coords[1:]))
+    pasi.append({"tip": "sosire", "text": f"Ai ajuns la {nume_dest}", "strada": nume_dest,
+                 "la_m": round(total), "lat": dest[0], "lng": dest[1]})
+    pasi[0]["la_m"] = 0                            # primul pas incepe chiar de unde e camionul
+    for p, q in zip(pasi, pasi[1:]):
+        p["distanta_m"] = q["la_m"] - p["la_m"]
+    pasi[-1]["distanta_m"] = 0
+    return {"geometrie": coords, "distanta_m": round(total), "pasi": pasi}
+
+
 def _draw(plan, stops):
     return _geometry([plan["_nodes"][s] for s in stops], [plan["_points"].get(s) for s in stops])
 
