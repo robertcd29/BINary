@@ -377,7 +377,7 @@ def pubele_fizice():
     with _connect() as conn:
         if not _has_trashes(conn):
             return []
-        return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
+        return conn.execute("SELECT * FROM trashes ORDER BY id").fetchall()
 
 
 @router.get("/pubele")
@@ -468,3 +468,32 @@ def pozitie(p: Pozitie):
 @router.get("/pozitii")
 def pozitii():
     return list(_state["pozitii"].values())
+
+
+# ---------- compatibilitate cu aplicatia lui Mihai (exact caile si raspunsurile pe care le cere ea) ----------
+
+compat = APIRouter()        # montat fara /api in main.py
+
+
+@compat.get("/trashes")
+def compat_trashes():
+    """Aceleasi pubele reale ca /trashes de la Robert; doar citire."""
+    with _connect() as conn:
+        if not _has_trashes(conn):
+            return []
+        return conn.execute("SELECT * FROM trashes ORDER BY id").fetchall()
+
+
+@compat.post("/rapoarte")
+def compat_rapoarte(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...),
+                    descriere: str = Form("")):
+    """Aplicatia asteapta {id, status}; filtrul Gemini si alertele sunt cele din /api/rapoarte."""
+    r = raport_cetatean(poza, lat, lng)
+    if not r["acceptat"]:
+        return {"id": "-", "status": "Respinsă", "motiv": r["motiv"]}
+    return {"id": r["alerta"]["id"], "status": "Acceptată", "descriere": r["descriere"]}
+
+
+@compat.post("/pozitie")
+def compat_pozitie(p: Pozitie):
+    return pozitie(p)

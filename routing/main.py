@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 import api
 
@@ -22,6 +23,8 @@ async def lifespan(app):
 
 
 app = FastAPI(title="BINary - rutare", lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(api.router)
+app.include_router(api.compat)      # caile fara /api pe care le foloseste aplicatia lui Mihai
 app.mount("/captures", StaticFiles(directory="captures", check_dir=False), name="captures")
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

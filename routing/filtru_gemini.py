@@ -18,7 +18,7 @@ client = genai.Client(
     api_key=os.environ["GEMINI_API_KEY"],
     http_options=types.HttpOptions(api_version="v1beta"),   # raspunsul in JSON merge doar pe v1beta
 )
-MODEL = "gemini-2.5-flash-lite"
+MODEL = "gemini-3.5-flash-lite"
 PRAG = 0.6
 
 INSTRUCTIUNI = (
