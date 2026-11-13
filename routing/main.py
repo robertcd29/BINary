@@ -5,6 +5,7 @@ Pornire, din folderul routing (alt port decat backend-ul):
 La pornire incepe sa urmareasca tabela trashes (senzorii reali, scrisi de backend).
 """
 import threading
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi.staticfiles import StaticFiles
 
@@ -28,5 +29,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.include_router(api.router)
 app.include_router(api.compat)      # caile fara /api pe care le foloseste aplicatia lui Mihai
 app.mount("/captures", StaticFiles(directory="captures", check_dir=False), name="captures")
-app.mount("/dispecer", StaticFiles(directory="/home/ubuntu/frontend/static", html=True), name="static")
+# dashboard-ul vine direct din repo (routing/static), deci se actualizeaza singur la fiecare push
+app.mount("/dispecer", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
 app.mount("/", StaticFiles(directory="/home/ubuntu/frontend/mobil", html=True, check_dir=False), name="mobil")
