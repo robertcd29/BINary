@@ -167,6 +167,18 @@
             font: 700 13px var(--font-cifre);
         }
 
+        .camion-live {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 3px solid var(--panou);
+            box-shadow: 0 0 0 2px var(--asfalt);
+            color: #fff;
+            display: grid;
+            place-items: center;
+            font: 700 15px var(--font-cifre);
+        }
+
         .depozitare-poza {
             display: block;
             width: 220px;
@@ -503,7 +515,7 @@
     </aside>
 
     <script>
-        const REIMPROSPATARE_MS = 10000;
+        const REIMPROSPATARE_MS = 5000;
         const CULORI_CAMIOANE = ["#2563c9", "#7a3fb0", "#0f8a8a", "#b5487a", "#5b6b1f"];
         const STARE = {
             deschisa: "În așteptare",
@@ -522,6 +534,7 @@
         const stratRute = L.layerGroup().addTo(harta);
         const stratPubele = L.layerGroup().addTo(harta);
         const stratDepozitari = L.layerGroup().addTo(harta);
+        const stratCamioane = L.layerGroup().addTo(harta);
         const markeriDepozitari = {};
         let primaIncarcare = true;
 
@@ -702,6 +715,24 @@
             });
         }
 
+        // ---------- camioanele, din GPS-ul aplicatiei soferului ----------
+        function deseneazaCamioane(pozitii) {
+            stratCamioane.clearLayers();
+            pozitii.forEach(p => {
+                const culoare = CULORI_CAMIOANE[p.camion % CULORI_CAMIOANE.length];
+                const secunde = Math.round((Date.now() - new Date(p.la)) / 1000);
+                const cand = secunde < 60 ? `acum ${secunde} s` : `acum ${Math.round(secunde / 60)} min`;
+                L.marker([p.lat, p.lng], {
+                    icon: L.divIcon({
+                        className: "",
+                        html: `<div class="camion-live" style="background:${culoare}">${p.camion + 1}</div>`,
+                        iconSize: [30, 30],
+                    }),
+                    zIndexOffset: 2000,
+                }).bindTooltip(`${numeCamion(p.camion)}, poziție GPS ${cand}`).addTo(stratCamioane);
+            });
+        }
+
         // ---------- evenimente de la senzori ----------
         const vazute = new Set();
         let primeleEvenimente = true;
@@ -748,9 +779,12 @@
 
         async function actualizeaza(plan) {
             // pubelele si depozitarile apar imediat; rutele vin separat, cand sunt gata
-            const [p, alerte] = await Promise.all([pubele(), cere("GET", "/api/alerte")]);
+            const [p, alerte, pozitii] = await Promise.all([
+                pubele(), cere("GET", "/api/alerte"), cere("GET", "/api/pozitii").catch(() => []),
+            ]);
             deseneazaPubele(p);
             deseneazaDepozitari(alerte);
+            deseneazaCamioane(pozitii);
             if (primaIncarcare && p.length) {
                 harta.fitBounds(p.map(x => [x.lat, x.lng ?? x.lon]), { padding: [40, 40] });
                 primaIncarcare = false;
@@ -768,7 +802,7 @@
                         areRute = true;
                         seteazaStatus(`Actualizat la ${ora()}. Se reîmprospătează singur.`);
                     })
-                    .catch(e => seteazaStatus(`Rutele nu s-au putut încărca (${e.message}). Reîncerc în 10 secunde.`, true))
+                    .catch(e => seteazaStatus(`Rutele nu s-au putut încărca (${e.message}). Reîncerc în câteva secunde.`, true))
                     .finally(() => { ruteInCurs = false; });
             }
             if (areRute) seteazaStatus(`Actualizat la ${ora()}. Se reîmprospătează singur.`);
@@ -797,7 +831,7 @@
         function porneste() {
             if (document.querySelector(".leaflet-popup")) return;   // nu inchidem popup-ul pe care il citeste cineva
             actualizeaza().catch(e =>
-                seteazaStatus(`Nu primesc date de la server (${e.message}). Reîncerc în 10 secunde.`, true));
+                seteazaStatus(`Nu primesc date de la server (${e.message}). Reîncerc în câteva secunde.`, true));
         }
 
         document.getElementById("azi").textContent = "Timișoara, " +

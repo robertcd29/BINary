@@ -28,4 +28,5 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.include_router(api.router)
 app.include_router(api.compat)      # caile fara /api pe care le foloseste aplicatia lui Mihai
 app.mount("/captures", StaticFiles(directory="captures", check_dir=False), name="captures")
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/dispecer", StaticFiles(directory="/home/ubuntu/frontend/static", html=True), name="static")
+app.mount("/", StaticFiles(directory="/home/ubuntu/frontend/mobil", html=True, check_dir=False), name="mobil")

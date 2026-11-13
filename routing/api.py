@@ -341,11 +341,17 @@ def golita(bin_id: str):
         found = conn.execute("UPDATE rutare_pubele SET umplere = 0, actualizat = now() WHERE id = %s",
                              (bin_id,)).rowcount
         if not found:
-            raise HTTPException(404, "Pubela simulata nu exista (golirea celor reale se vede din senzor)")
+            # ghena reala (din trashes): nu scriem in tabela lui Robert, doar marcam golirea la noi;
+            # istoricul de umplere porneste de la zero, iar senzorul confirma golirea la urmatoarea citire
+            real = _has_trashes(conn) and conn.execute(
+                "SELECT 1 FROM trashes WHERE id = %s", (bin_id,)).fetchone()
+            if not real:
+                raise HTTPException(404, "Ghena nu exista")
         conn.execute("""INSERT INTO rutare_golire (bin_id, golita_la) VALUES (%s, now())
                         ON CONFLICT (bin_id) DO UPDATE SET golita_la = EXCLUDED.golita_la""", (bin_id,))
         _state["urgent"][bin_id] = False
         _state["facute"].add(bin_id)
+        _event({"id": bin_id, "status": "golita"})
     return {"status": "ok"}
 
 
