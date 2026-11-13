@@ -48,11 +48,13 @@ EMPTY_DROP = 30                 # o scadere brusca de 30+ puncte = pubela a fost
 HISTORY_SLOT = "1 minute"       # citirile se mediaza pe intervale, pentru regresie
 MIN_HISTORY_H = 1.0             # istoricul real conteaza doar daca acopera cel putin o ora
 MAX_EVENTS = 50
+RAPORTARE_PCT = 5               # o schimbare de umplere de cel putin 5 puncte apare in fluxul live
 FOLOSESTE_SIMULATE = False      # True = pe langa ghenele din trashes, si cele 60 de pubele din bins.json
 
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
 _state = {"plan": None, "bins": None, "surse": {}, "urgent": {}, "seen": None, "evenimente": [],
+          "raportat": None,     # ultima umplere aratata in fluxul live, pe ghena
           "facute": set(),      # opririle bifate azi de soferi (pubele golite, depozitari colectate)
           "pozitii": {}}        # ultima pozitie GPS a fiecarui camion; doar in memorie, nu in DB
 
@@ -156,7 +158,13 @@ def _poll(conn):
         _state["seen"] = {r["bin_id"]: r["ts"] for r in conn.execute(
             "SELECT bin_id, max(ts) AS ts FROM rutare_citiri GROUP BY bin_id").fetchall()}
     seen, events = _state["seen"], []
-    for r in conn.execute("SELECT id, lat, lng, umplere, actualizat FROM trashes ORDER BY id").fetchall():
+    rows = conn.execute("SELECT id, lat, lng, umplere, actualizat FROM trashes ORDER BY id").fetchall()
+    if _state["raportat"] is None:
+        # dupa repornire pornim de la valorile curente: planul le ia oricum, deci fara evenimente false
+        vals = {r["id"]: sf.valid(r["umplere"]) for r in rows}
+        _state["raportat"] = {k: v for k, v in vals.items() if v is not None}
+        _state["urgent"] = {k: v > engine.MIN_FILL * 100 for k, v in _state["raportat"].items()}
+    for r in rows:
         ts, bid = r["actualizat"], r["id"]
         if ts is None or (bid in seen and ts <= seen[bid]):
             continue
@@ -172,12 +180,22 @@ def _poll(conn):
             _state["facute"].add(bid)
             events.append(_event({"id": bid, "status": "golita"}))
         conn.execute("INSERT INTO rutare_citiri (bin_id, umplere, ts) VALUES (%s, %s, %s)", (bid, value, ts))
-        level = sf.smooth(_recent_levels(conn, bid))
+        if value is None:
+            continue
+        # fiecare schimbare vizibila de umplere apare in fluxul din dashboard (pragul de 5 puncte
+        # tine deoparte zgomotul senzorului, care trimite o citire la 2 secunde)
+        last = _state["raportat"].get(bid)
+        if last is None or abs(value - last) >= RAPORTARE_PCT or (value > 0) != (last > 0):
+            _state["raportat"][bid] = value
+            if last is not None and emptied is None:
+                events.append(_event({"id": bid, "status": "citire", "umplere": round(value),
+                                      "inainte": round(last)}))
+        # orice ghena care primeste deseuri intra pe ruta, la fel ca in planul de dimineata
         was = _state["urgent"].get(bid, False)
-        urgent = sf.next_urgent(was, level)
+        urgent = value > engine.MIN_FILL * 100
         _state["urgent"][bid] = urgent
-        if urgent and not was:
-            events.append(_became_urgent(r, level))
+        if urgent and not was and emptied is None:
+            events.append(_became_urgent(r, value))
     return events
 
 
@@ -420,10 +438,10 @@ def toate_pubelele():
             _, dist_m = engine._snap(float(b["lat"]), float(b["lng"]))
         except Exception:
             continue
-        if dist_m > engine.MAX_SNAP_M:
-            continue                  # in afara hartii de strazi: nu poate fi pusa pe nicio ruta, deci n-o aratam
         r = info.get(b["id"], {})     # numele si adresa vin din tabela trashes a lui Robert
         out.append({**b, "reala": b["id"] in surse,
+                    # departe de orice strada din harta: o aratam, dar nu poate fi pusa pe o ruta
+                    "pe_ruta_posibil": dist_m <= engine.MAX_SNAP_M,
                     # pe harta aratam exact valoarea din baza de date; rutarea foloseste in continuare
                     # valoarea filtrata (b["umplere"]), ca o citire gresita sa nu trimita un camion degeaba
                     "umplere": r.get("umplere", b["umplere"]),

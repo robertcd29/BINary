@@ -494,7 +494,7 @@
         </header>
 
         <div class="rezumat" aria-live="polite">
-            <div class="alarma"><b id="nr-pline">–</b><span>pubele peste 85%</span></div>
+            <div class="alarma"><b id="nr-pline">–</b><span>ghene de golit azi</span></div>
             <div><b id="nr-depozitari">–</b><span>depozitări de ridicat</span></div>
             <div><b id="km-total">–</b><span>km planificați</span></div>
         </div>
@@ -659,13 +659,15 @@
                     info.append(element("b", "", p.nume || p.id),
                         element("span", "", p.adresa || "Adresă necunoscută"),
                         element("span", "", `Umplere: ${Math.round(p.umplere ?? 0)}%`));
+                    if (p.pe_ruta_posibil === false)
+                        info.append(element("span", "", "Prea departe de o stradă din hartă: nu poate fi pusă pe rută"));
                     m.bindTooltip(info);
                 } else {
                     m.bindTooltip(`Pubelă simulată ${p.id}: ${Math.round(p.umplere ?? 0)}%`);
                 }
                 m.addTo(stratPubele);
             });
-            document.getElementById("nr-pline").textContent = lista.filter(p => p.umplere >= 85).length;
+            document.getElementById("nr-pline").textContent = lista.filter(p => p.umplere > 0).length;
         }
 
         function deseneazaDepozitari(alerte) {
@@ -754,12 +756,13 @@
         function textEveniment(e) {
             const nume = numePubele[e.id] || e.id;
             if (e.status === "golita") return [`${nume} a fost golită.`, true];
-            if (e.status === "assigned") return [`${nume} a trecut de 80% și a fost adăugată pe ruta camionului ${e.truck + 1}`
+            if (e.status === "citire") return [`${nume}: umplere ${e.inainte}% → ${e.umplere}%.`, e.umplere < 85];
+            if (e.status === "assigned") return [`${nume} are deșeuri și a fost adăugată pe ruta camionului ${e.truck + 1}`
                 + (e.extra_m ? ` (+${(e.extra_m / 1000).toFixed(1)} km).` : "."), false];
-            if (e.status === "pending") return [`${nume} a trecut de 80%, dar niciun camion nu mai are loc azi.`, false];
-            if (e.status === "rejected") return [`${nume} a trecut de 80%, dar nu poate fi adăugată pe o rută (${e.reason}).`, false];
-            if (e.reason === "e deja pe o ruta") return [`${nume} a trecut de 80%. E deja pe ruta de azi.`, false];
-            if (e.status === "urgenta") return [`${nume} a trecut de 80%. Intră în primul plan calculat.`, false];
+            if (e.status === "pending") return [`${nume} are deșeuri, dar niciun camion nu mai are loc azi.`, false];
+            if (e.status === "rejected") return [`${nume} are deșeuri, dar nu poate fi adăugată pe o rută (${e.reason}).`, false];
+            if (e.reason === "e deja pe o ruta") return [`${nume} are deșeuri. E deja pe ruta de azi.`, true];
+            if (e.status === "urgenta") return [`${nume} are deșeuri. Intră în primul plan calculat.`, false];
             return [`${nume}: ${e.status}`, true];
         }
 
@@ -767,7 +770,7 @@
             const lista = document.getElementById("evenimente");
             lista.replaceChildren();
             if (!evenimente.length) {
-                lista.append(element("li", "gol", "Nimic nou încă. Când o ghenă cu senzor trece de 80% sau e golită, apare aici."));
+                lista.append(element("li", "gol", "Nimic nou încă. Orice schimbare de umplere a unei ghene sau o golire apare aici."));
                 return;
             }
             [...evenimente].reverse().slice(0, 6).forEach(e => {
