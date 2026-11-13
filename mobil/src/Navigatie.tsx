@@ -378,6 +378,7 @@ const POS_SMOOTH_S = 0.45       // cat de repede ajunge camionul desenat la pozi
 const HEADING_SMOOTH_S = 0.6    // cat de lin se roteste harta la viraje
 const NORTH_SMOOTH_S = 0.4      // revenirea la nordul in sus
 const TILT_TRUCK_FROM_BOTTOM = 0.2  // vederea 3D: camionul la 20% din inaltime, de jos
+const NAV_PANE = 'navigatie'
 
 const TRUCK_ICON = L.divIcon({
   className: '',
@@ -480,13 +481,20 @@ export function NavLayer({ n }: { n: NavState }) {
     }
   }, [map])
 
+  // strat propriu deasupra traseului verde (care se poate incarca dupa); il punem langa celelalte
+  // straturi, in panoul care se roteste, altfel n-ar urma rotirea hartii
+  if (!map.getPane(NAV_PANE)) {
+    const pane = map.createPane(NAV_PANE, map.getPane('overlayPane')?.parentElement ?? undefined)
+    pane.style.zIndex = '450'
+  }
+
   if (!n.leg) return null
   return (
     <>
-      <Polyline positions={n.leg.geometrie} pathOptions={{ color: '#fff', weight: 12, opacity: 0.9 }} />
-      <Polyline positions={n.leg.geometrie} pathOptions={{ color: '#2463eb', weight: 7 }} />
+      <Polyline pane={NAV_PANE} positions={n.leg.geometrie} pathOptions={{ color: '#fff', weight: 12, opacity: 0.9 }} />
+      <Polyline pane={NAV_PANE} positions={n.leg.geometrie} pathOptions={{ color: '#2463eb', weight: 7 }} />
       {n.next && n.next.tip !== 'sosire' && (
-        <CircleMarker center={[n.next.lat, n.next.lng]} radius={6}
+        <CircleMarker pane={NAV_PANE} center={[n.next.lat, n.next.lng]} radius={6}
           pathOptions={{ color: '#fff', weight: 2, fillColor: '#2463eb', fillOpacity: 1 }} />
       )}
     </>
