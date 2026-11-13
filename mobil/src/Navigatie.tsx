@@ -2,13 +2,17 @@
 // voce in romana, harta care urmareste camionul si recalcularea traseului cand iese de pe el.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { CircleMarker, Marker, Polyline, useMap } from 'react-leaflet'
+import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, Compass, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
   Navigation2, Play, Square, Undo2, Volume2, VolumeX
 } from 'lucide-react'
 
 type RotatableMap = L.Map & { setBearing?: (deg: number) => void }
+type ViewMode = '3d' | '2d' | 'nord'
+const VIEW_LABEL: Record<ViewMode, string> = {
+  '3d': 'înclinată, pe direcția de mers', '2d': 'de sus, pe direcția de mers', nord: 'de sus, nordul în sus'
+}
 
 import {
   getNavigation, sendDriverPosition,
@@ -130,7 +134,8 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   const [simulating, setSimulating] = useState(false)
   const [simPos, setSimPos] = useState<Coordinates | null>(null)
 
-  const [headingUp, setHeadingUp] = useState(true)   // harta rotita pe directia de mers, ca la GPS
+  // 3d = inclinata si rotita ca la Waze, 2d = rotita pe directia de mers, nord = nordul in sus
+  const [viewMode, setViewMode] = useState<ViewMode>('3d')
   const lastHeading = useRef(0)
 
   const position = simulating ? simPos : gps
@@ -238,16 +243,25 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   function start() {
     setStarted(true)
     setFollow(true)
+    // harta in ecran, sub bara de instructiuni de sus
+    setTimeout(() => document.querySelector('.map-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
     if (voice) speak(current ? `Navigație pornită. ${current.text}` : 'Navigație pornită')
   }
 
   return {
-    nav, leg, stop, error, loading, started, voice, follow, simulating, position, heading, headingUp, setHeadingUp,
-    current, next, toNext, remaining, arrived, etaMin, stepIndex,
+    nav, leg, stop, error, loading, started, voice, follow, simulating, position, heading,
+    viewMode, cycleView: () => setViewMode(m => (m === '3d' ? '2d' : m === '2d' ? 'nord' : '3d')),
+    rotated: started && follow && viewMode !== 'nord',
+    tilted: started && follow && viewMode === '3d',
+    current, next, then: leg?.pasi[stepIndex + 2] ?? null, toNext, remaining, arrived, etaMin, stepIndex,
     refresh, start,
     stop_: () => { setStarted(false); setSimulating(false); window.speechSynthesis?.cancel() },
     setVoice, setFollow,
-    toggleSim: () => { setSimulating(s => !s); setStarted(true); setFollow(true) }
+    toggleSim: () => {
+      setSimulating(s => !s)
+      if (!started) start()
+      setFollow(true)
+    }
   }
 }
 
@@ -282,7 +296,7 @@ export function NavCard({ n, onComplete }: {
 
   return (
     <section className="panel nav-card">
-      <div className={`nav-instruction${n.arrived ? ' arrived' : ''}`}>
+      {!n.started && <div className={`nav-instruction${n.arrived ? ' arrived' : ''}`}>
         <div className="nav-arrow">
           <ManeuverIcon tip={n.arrived ? 'sosire' : n.started ? (n.next?.tip ?? 'sosire') : (n.current?.tip ?? 'start')} />
         </div>
@@ -297,7 +311,7 @@ export function NavCard({ n, onComplete }: {
           )}
           {!n.arrived && n.started && n.current && <small>Acum pe {n.current.strada}</small>}
         </div>
-      </div>
+      </div>}
 
       <div className="nav-destination">
         <div>
@@ -326,12 +340,13 @@ export function NavCard({ n, onComplete }: {
         </button>
         {n.started && (
           <button
-            className={`icon-button${n.headingUp ? ' active' : ''}`}
-            onClick={() => n.setHeadingUp(!n.headingUp)}
-            aria-label={n.headingUp ? 'Harta cu nordul în sus' : 'Harta pe direcția de mers'}
-            title={n.headingUp ? 'Direcția de mers în sus' : 'Nordul în sus'}
+            className="icon-button view-button"
+            onClick={n.cycleView}
+            aria-label={`Vedere: ${VIEW_LABEL[n.viewMode]}. Apasă pentru următoarea`}
+            title={VIEW_LABEL[n.viewMode]}
           >
-            <Compass size={18} />
+            <Compass size={16} />
+            <span>{n.viewMode === 'nord' ? 'N' : n.viewMode.toUpperCase()}</span>
           </button>
         )}
         {!n.follow && n.started && (
@@ -357,70 +372,183 @@ export function NavCard({ n, onComplete }: {
   )
 }
 
-/** Straturile de navigatie de pe harta: etapa curenta, virajul urmator, camionul si urmarirea lui. */
+// ---------- harta: camera animata, ca la Waze ----------
+
+const POS_SMOOTH_S = 0.45       // cat de repede ajunge camionul desenat la pozitia GPS (secunde)
+const HEADING_SMOOTH_S = 0.6    // cat de lin se roteste harta la viraje
+const NORTH_SMOOTH_S = 0.4      // revenirea la nordul in sus
+const TILT_TRUCK_FROM_BOTTOM = 0.2  // vederea 3D: camionul la 20% din inaltime, de jos
+
+const TRUCK_ICON = L.divIcon({
+  className: '',
+  html: `<div class="truck-arrow"><svg viewBox="0 0 24 24" width="34" height="34">
+    <path d="M12 2 L20 21 L12 16.5 L4 21 Z"/></svg></div>`,
+  iconSize: [34, 34],
+  iconAnchor: [17, 17]
+})
+
+/** Diferenta cea mai scurta intre doua unghiuri, in grade (-180..180). */
+function angleDelta(from: number, to: number) {
+  return ((to - from + 540) % 360) - 180
+}
+
+/** Straturile de navigatie de pe harta si camera care urmareste camionul, animata la fiecare cadru. */
 export function NavLayer({ n }: { n: NavState }) {
-  const map = useMap()
+  const map = useMap() as RotatableMap
+  const latest = useRef(n)
+  latest.current = n
+  const cam = useRef({ pos: null as Coordinates | null, heading: 0, bearing: 0, center: '' })
   const zoomed = useRef(false)
 
   useEffect(() => {
-    const stopFollow = () => n.setFollow(false)
+    const stopFollow = () => latest.current.setFollow(false)
     map.on('dragstart', stopFollow)
     return () => { map.off('dragstart', stopFollow) }
-  }, [map, n.setFollow])
+  }, [map])
 
-  const rotated = n.started && n.follow && n.headingUp
-  const mapBearing = rotated ? -n.heading : 0   // leaflet-rotate: -directia => directia de mers e in sus
+  // harta isi schimba marimea cand porneste navigatia si cand se inclina (dupa tranzitia CSS)
+  useEffect(() => {
+    const ids = [60, 480].map(ms => setTimeout(() => map.invalidateSize({ pan: false }), ms))
+    return () => ids.forEach(clearTimeout)
+  }, [map, n.started, n.tilted])
 
   useEffect(() => {
-    (map as RotatableMap).setBearing?.(mapBearing)
-  }, [map, mapBearing])
+    const marker = L.marker([0, 0], { icon: TRUCK_ICON, interactive: false, zIndexOffset: 3000 })
+    let raf = 0
+    let last = performance.now()
 
-  useEffect(() => {
-    if (!n.started || !n.follow || !n.position) return
-    const zoom = zoomed.current ? map.getZoom() : NAV_ZOOM
-    let center = n.position
-    if (rotated) {
-      // centrul hartii e in fata camionului, deci camionul apare jos si se vede drumul care urmeaza
-      const mPerPx = (156_543.03 * Math.cos((n.position.lat * Math.PI) / 180)) / 2 ** zoom
-      const shiftPx = (TRUCK_SCREEN_Y - 0.5) * map.getSize().y
-      center = ahead(n.position, n.heading, shiftPx * mPerPx)
+    const frame = (now: number) => {
+      const dt = Math.min(0.1, (now - last) / 1000)
+      last = now
+      const s = latest.current
+      const c = cam.current
+
+      // camionul desenat aluneca spre pozitia GPS, iar directia lui se roteste lin
+      if (s.position && (s.started || s.simulating)) {
+        const p = s.position
+        if (!c.pos || meters([c.pos.lat, c.pos.lng], [p.lat, p.lng]) > 300) {
+          c.pos = { ...p }
+          c.heading = s.heading
+        } else {
+          const k = 1 - Math.exp(-dt / POS_SMOOTH_S)
+          c.pos = { lat: c.pos.lat + (p.lat - c.pos.lat) * k, lng: c.pos.lng + (p.lng - c.pos.lng) * k }
+          c.heading = (c.heading + angleDelta(c.heading, s.heading) * (1 - Math.exp(-dt / HEADING_SMOOTH_S)) + 360) % 360
+        }
+        if (!map.hasLayer(marker)) marker.addTo(map)
+        marker.setLatLng([c.pos.lat, c.pos.lng])
+      } else if (map.hasLayer(marker)) {
+        marker.remove()
+        c.pos = null
+      }
+
+      // rotirea hartii: legata de directia lina a camionului, sau revine lin la nord
+      const want = s.rotated ? -c.heading : 0
+      const nb = s.rotated ? want : c.bearing + angleDelta(c.bearing, want) * (1 - Math.exp(-dt / NORTH_SMOOTH_S))
+      if (Math.abs(angleDelta(c.bearing, nb)) > 0.01) {
+        c.bearing = nb
+        map.setBearing?.(nb)
+      }
+      const el = marker.getElement()?.firstElementChild as HTMLElement | null
+      if (el) el.style.transform = `rotate(${c.heading + c.bearing}deg)`
+
+      // camera: centrul hartii in fata camionului, ca sa se vada drumul care urmeaza
+      if (s.started && s.follow && c.pos) {
+        if (!zoomed.current) {
+          zoomed.current = true
+          map.setZoom(NAV_ZOOM, { animate: false })
+        }
+        const size = map.getSize()
+        const viewport = map.getContainer().parentElement?.clientHeight ?? size.y
+        const shiftPx = s.tilted ? size.y / 2 - TILT_TRUCK_FROM_BOTTOM * viewport
+          : s.rotated ? (TRUCK_SCREEN_Y - 0.5) * size.y : 0
+        const mPerPx = (156_543.03 * Math.cos((c.pos.lat * Math.PI) / 180)) / 2 ** map.getZoom()
+        const center = shiftPx ? ahead(c.pos, -c.bearing, shiftPx * mPerPx) : c.pos
+        const key = `${center.lat.toFixed(7)},${center.lng.toFixed(7)},${size.y}`
+        if (key !== c.center) {
+          c.center = key
+          map.setView([center.lat, center.lng], map.getZoom(), { animate: false })
+        }
+      }
+      if (!s.started) zoomed.current = false
+      raf = requestAnimationFrame(frame)
     }
-    if (!zoomed.current) {
-      zoomed.current = true
-      map.setView([center.lat, center.lng], zoom, { animate: false })
-    } else {
-      map.panTo([center.lat, center.lng], { animate: true, duration: 0.35, easeLinearity: 1 })
+
+    raf = requestAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(raf)
+      marker.remove()
     }
-  }, [map, n.started, n.follow, n.position, n.heading, rotated])
-
-  useEffect(() => {
-    if (!n.started) zoomed.current = false
-    // harta isi schimba inaltimea cand porneste/se opreste navigatia
-    const t = setTimeout(() => map.invalidateSize(), 50)
-    return () => clearTimeout(t)
-  }, [map, n.started])
-
-  // sageata camionului: pe ecran arata directia de mers (cu harta rotita, mereu in sus)
-  const arrow = useMemo(() => L.divIcon({
-    className: '',
-    html: `<div class="truck-arrow" style="transform: rotate(${Math.round(n.heading + mapBearing)}deg)">
-      <svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2 L20 21 L12 16.5 L4 21 Z"/></svg></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17]
-  }), [n.heading, mapBearing])
+  }, [map])
 
   if (!n.leg) return null
   return (
     <>
-      <Polyline positions={n.leg.geometrie} pathOptions={{ color: '#fff', weight: 10, opacity: 0.9 }} />
-      <Polyline positions={n.leg.geometrie} pathOptions={{ color: '#2463eb', weight: 6 }} />
+      <Polyline positions={n.leg.geometrie} pathOptions={{ color: '#fff', weight: 12, opacity: 0.9 }} />
+      <Polyline positions={n.leg.geometrie} pathOptions={{ color: '#2463eb', weight: 7 }} />
       {n.next && n.next.tip !== 'sosire' && (
         <CircleMarker center={[n.next.lat, n.next.lng]} radius={6}
           pathOptions={{ color: '#fff', weight: 2, fillColor: '#2463eb', fillOpacity: 1 }} />
       )}
-      {n.position && (n.started || n.simulating) && (
-        <Marker position={[n.position.lat, n.position.lng]} icon={arrow} zIndexOffset={3000} interactive={false} />
-      )}
     </>
+  )
+}
+
+// ---------- bara de sus, fixa, ca la Waze ----------
+
+const MANEVRA: Record<NavStep['tip'], string> = {
+  start: 'Pornește', inainte: 'Continuă înainte', 'usor-dreapta': 'Ușor la dreapta', dreapta: 'Virează la dreapta',
+  'usor-stanga': 'Ușor la stânga', stanga: 'Virează la stânga', intoarcere: 'Întoarce-te', sosire: 'Destinația'
+}
+
+export function NavTopBar({ n }: { n: NavState }) {
+  const on = n.started && !!n.leg && !!n.stop
+
+  // continutul paginii coboara sub bara cat timp e afisata
+  useEffect(() => {
+    document.body.classList.toggle('nav-active', on)
+    return () => document.body.classList.remove('nav-active')
+  }, [on])
+
+  if (!on || !n.stop) return null
+
+  if (n.arrived || !n.next) {
+    return (
+      <div className="nav-topbar arrived" role="status" aria-live="polite">
+        <div className="nav-topbar-main">
+          <div className="nav-topbar-icon"><Flag size={40} /></div>
+          <div className="nav-topbar-text">
+            <span className="nav-topbar-action">Ai ajuns</span>
+            <strong>{n.stop.tip === 'depou' ? 'La depou' : n.stop.nume}</strong>
+          </div>
+        </div>
+        {n.stop.tip !== 'depou' && <div className="nav-topbar-then">Golește ghena, apoi apasă „Am golit ghena”</div>}
+      </div>
+    )
+  }
+
+  const next = n.next
+  const strada = next.tip === 'sosire' ? n.stop.nume : next.strada
+  const showThen = n.then && n.then.tip !== 'sosire' && next.distanta_m <= 400
+
+  return (
+    <div className="nav-topbar" role="status" aria-live="polite">
+      <div className="nav-topbar-main">
+        <div className="nav-topbar-icon"><ManeuverIcon tip={next.tip} size={44} /></div>
+        <div className="nav-topbar-text">
+          <span className="nav-topbar-distance">{formatDistance(n.toNext)}</span>
+          <span className="nav-topbar-action">{MANEVRA[next.tip]}</span>
+          <strong>{strada}</strong>
+        </div>
+        <div className="nav-topbar-eta">
+          <strong>{n.etaMin} min</strong>
+          <small>{formatDistance(n.remaining)}</small>
+        </div>
+      </div>
+      {showThen && n.then && (
+        <div className="nav-topbar-then">
+          Apoi <ManeuverIcon tip={n.then.tip} size={16} /> {n.then.strada}
+        </div>
+      )}
+    </div>
   )
 }

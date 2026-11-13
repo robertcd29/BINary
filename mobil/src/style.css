@@ -308,26 +308,83 @@ button:disabled {
 }
 
 /* inaltime fixa doar pentru harta: titlul si statisticile de deasupra nu o mai taie jos */
-.map-panel .leaflet-container {
-  width: 100%;
+.map-viewport {
+  position: relative;
   height: 330px;
+  overflow: hidden;
+  background: #e7ece8;
+}
+
+.map-panel .leaflet-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+  transition: transform 0.45s ease;
 }
 
 /* in timpul navigatiei harta e mare, ca ecranul unui GPS; titlul si statisticile se ascund */
+.map-panel.navigating {
+  scroll-margin-top: 132px;
+}
+
 .map-panel.navigating .map-title,
 .map-panel.navigating .route-stats {
   display: none;
 }
 
-.map-panel.navigating .leaflet-container {
-  height: 62vh;
+.map-panel.navigating .map-viewport {
+  height: calc(100vh - 150px);
+  height: calc(100dvh - 150px);
   min-height: 360px;
+  perspective: 800px;
+  perspective-origin: 50% 0%;
+}
+
+/* vederea 3D: harta e mai mare decat fereastra si culcata spre orizont, ca la Waze;
+   marimea acopera colturile de sus, care se micsoreaza in perspectiva */
+.map-panel.tilted .leaflet-container {
+  top: auto;
+  bottom: 0;
+  left: -40%;
+  width: 180%;
+  height: 160%;
+  transform: rotateX(45deg);
+}
+
+.map-panel.tilted .leaflet-control-container {
+  display: none;
+}
+
+/* ceata spre orizont si atribuirea hartii (controalele Leaflet sunt ascunse in 3D) */
+.map-panel.tilted .map-viewport::before {
+  position: absolute;
+  z-index: 500;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 22%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(#f4f7f5, #f4f7f500);
+}
+
+.map-panel.tilted .map-viewport::after {
+  position: absolute;
+  z-index: 500;
+  right: 6px;
+  bottom: 4px;
+  content: "© OpenStreetMap";
+  color: #5d6b62;
+  font-size: 10px;
+  pointer-events: none;
 }
 
 .truck-arrow {
   width: 34px;
   height: 34px;
-  transition: transform 0.35s linear;
   filter: drop-shadow(0 2px 3px #0005);
 }
 
@@ -338,9 +395,117 @@ button:disabled {
   stroke-linejoin: round;
 }
 
-.icon-button.active {
+.view-button {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+/* ---------- bara de instructiuni de sus, fixa, ca la Waze ---------- */
+
+body.nav-active .app-shell {
+  padding-top: 118px;
+}
+
+.nav-topbar {
+  position: fixed;
+  z-index: 2000;
+  top: 0;
+  left: 50%;
+  width: min(760px, 100%);
+  padding-top: env(safe-area-inset-top);
   color: white;
+  background: #123b32;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 6px 20px #0003;
+  transform: translateX(-50%);
+}
+
+.nav-topbar.arrived {
   background: #24845d;
+}
+
+.nav-topbar-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.nav-topbar-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  background: #ffffff1f;
+  border-radius: 16px;
+}
+
+.nav-topbar-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nav-topbar-distance {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-topbar-action {
+  color: #ffffffbf;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nav-topbar-text strong {
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nav-topbar-eta {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-left: 10px;
+  border-left: 1px solid #ffffff2e;
+}
+
+.nav-topbar-eta strong {
+  font-size: 18px;
+}
+
+.nav-topbar-eta small {
+  color: #ffffffb3;
+  font-size: 12px;
+}
+
+.nav-topbar-then {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px 10px;
+  color: #ffffffd9;
+  background: #0000002e;
+  border-radius: 0 0 18px 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 380px) {
+  .nav-topbar-eta {
+    display: none;
+  }
 }
 
 .stop {

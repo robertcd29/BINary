@@ -36,7 +36,7 @@ import {
   type Role,
   type NavStop
 } from './api'
-import { NavCard, NavLayer, useNavigation } from './Navigatie'
+import { NavCard, NavLayer, NavTopBar, useNavigation } from './Navigatie'
 
 
 function MapFocus({ point, route }: { point: Coordinates | null; route: Coordinates[] }) {
@@ -281,6 +281,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {role === 'driver' && <NavTopBar n={navigation} />}
       <header className="topbar">
         <div className="brand">
           <div className="brand-icon"><Recycle size={22} /></div>
@@ -437,7 +438,7 @@ export default function App() {
 
             <NavCard n={navigation} onComplete={completeNavStop} />
 
-            <section className={`map-panel${navigation.started ? ' navigating' : ''}`}>
+            <section className={`map-panel${navigation.started ? ' navigating' : ''}${navigation.tilted ? ' tilted' : ''}`}>
               <div className="map-title">
                 <div><span className="step">01</span><h2>Traseul camionului {driverId}</h2></div>
                 <span>{stops.filter(stop => !stop.done).length} opriri rămase</span>
@@ -453,6 +454,8 @@ export default function App() {
 
               {routeLoading && <p className="empty">Se încarcă ruta...</p>}
 
+              {/* fereastra prin care se vede harta; in vederea 3D harta e mai mare si inclinata in ea */}
+              <div className="map-viewport">
               <MapContainer
                 key={driverId}
                 center={[mapCenter.lat, mapCenter.lng]}
@@ -495,7 +498,7 @@ export default function App() {
                   </CircleMarker>
                 ))}
 
-                {driverPosition && (
+                {driverPosition && !navigation.started && (
                   <CircleMarker
                     center={[driverPosition.lat, driverPosition.lng]}
                     radius={7}
@@ -505,6 +508,7 @@ export default function App() {
                   </CircleMarker>
                 )}
               </MapContainer>
+              </div>
             </section>
 
             <section className="panel">
