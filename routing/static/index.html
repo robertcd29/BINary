@@ -534,9 +534,9 @@
         const harta = L.map("harta", { zoomControl: false }).setView([45.7537, 21.2257], 13);
         L.control.zoom({ position: "topleft" }).addTo(harta);
 
-        // pubele mai mici la zoom out: marime normala de la zoom 16, -10% pe nivel, minim 50%
+        // pubele mai mici la zoom out: marime normala de la zoom 16, -15% pe nivel, minim 40%
         function scalaPubele() {
-            const s = Math.max(0.5, Math.min(1, 1 - (16 - harta.getZoom()) * 0.1));
+            const s = Math.max(0.4, Math.min(1, 1 - (16 - harta.getZoom()) * 0.15));
             harta.getContainer().style.setProperty("--scara-pubela", s);
         }
         harta.on("zoomend", scalaPubele);

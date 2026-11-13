@@ -29,6 +29,14 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.include_router(api.router)
 app.include_router(api.compat)      # caile fara /api pe care le foloseste aplicatia lui Mihai
 app.mount("/captures", StaticFiles(directory="captures", check_dir=False), name="captures")
+class FaraCache(StaticFiles):
+    """Browserul verifica mereu versiunea noua, deci un refresh simplu arata ultimele modificari."""
+    async def get_response(self, path, scope):
+        r = await super().get_response(path, scope)
+        r.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return r
+
+
 # dashboard-ul vine direct din repo (routing/static), deci se actualizeaza singur la fiecare push
-app.mount("/dispecer", StaticFiles(directory=Path(__file__).parent / "static", html=True), name="static")
+app.mount("/dispecer", FaraCache(directory=Path(__file__).parent / "static", html=True), name="static")
 app.mount("/", StaticFiles(directory="/home/ubuntu/frontend/mobil", html=True, check_dir=False), name="mobil")
