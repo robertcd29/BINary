@@ -74,14 +74,25 @@ def _matrix(graph_nodes):
     return np.array([[round(_dist(a, b)) for b in graph_nodes] for a in graph_nodes], dtype=int)
 
 
-def _geometry(stop_nodes):
-    """Coordonatele [lat, lng] ale strazilor parcurse intre opriri, pentru desenat pe harta."""
+def _geometry(stop_nodes, stop_points=None):
+    """Coordonatele [lat, lng] ale strazilor parcurse intre opriri, pentru desenat pe harta.
+
+    stop_points[i] = pozitia reala a opririi i (sau None). Camionul opreste la intersectia cea
+    mai apropiata, deci desenam si drumul pana la pubela si inapoi, ca ruta sa treaca prin ea.
+    """
     coords = []
-    for a, b in zip(stop_nodes, stop_nodes[1:]):
+    for i, (a, b) in enumerate(zip(stop_nodes, stop_nodes[1:]), start=1):
         path = _from(a)[1][b]
         pts = [[_G.nodes[n]["y"], _G.nodes[n]["x"]] for n in path]
         coords.extend(pts if not coords else pts[1:])
+        p = stop_points[i] if stop_points and i < len(stop_nodes) - 1 else None
+        if p:
+            coords.extend([list(p), pts[-1]])
     return coords
+
+
+def _draw(plan, stops):
+    return _geometry([plan["_nodes"][s] for s in stops], [plan["_points"].get(s) for s in stops])
 
 
 # ---------- validare ----------
@@ -159,7 +170,7 @@ def _empty_plan(depot_node, warnings):
     return {"total_distance_m": 0, "routes": routes, "skipped": [], "predictions": {},
             "metrics": {"total_km": 0, "trucks_used": 0, "bins_total": 0, "bins_collected": 0,
                         "bins_skipped": 0, "overflows_prevented": 0},
-            "alerts": [], "warnings": warnings, "_nodes": {"depot": depot_node}}
+            "alerts": [], "warnings": warnings, "_nodes": {"depot": depot_node}, "_points": {}}
 
 
 # ---------- API public ----------
@@ -175,6 +186,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
 
     ids = ["depot"] + [b["id"] for b in used]
     graph_nodes = [depot_node] + [b["_node"] for b in used]
+    points = {b["id"]: (float(b["lat"]), float(b["lng"])) for b in used}
     M = _matrix(graph_nodes)
     fills = [b["umplere"] / 100 for b in used]
     demands = [0] + [round(f * b.get("capacitate_l", DEFAULT_BIN_CAPACITY_L))
@@ -201,7 +213,8 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     routes, total, visited = _solve(M, demands, penalties, capacity, seconds)
     for r in routes:
         r["stops"] = [ids[i] for i in r["stops"]]
-        r["geometry"] = _geometry([graph_nodes[ids.index(s)] for s in r["stops"]])
+        r["geometry"] = _geometry([graph_nodes[ids.index(s)] for s in r["stops"]],
+                                  [points.get(s) for s in r["stops"]])
 
     unserved = [ids[i] for i in mandatory if i not in visited]
     if unserved:
@@ -236,6 +249,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         "alerts": [],
         "warnings": warnings,
         "_nodes": dict(zip(ids, graph_nodes)),   # intern: id -> nod din graf, pentru alerte
+        "_points": points,                       # intern: id -> pozitia reala, pentru desen
     }
 
 
@@ -293,8 +307,9 @@ def add_alert(plan, alert, kind="alert"):
     extra, route, pos = best
     dedicated = len(route["stops"]) == 2
     nodes[alert["id"]] = x
+    plan.setdefault("_points", {})[alert["id"]] = (float(alert["lat"]), float(alert["lng"]))
     route["stops"].insert(pos, alert["id"])
-    route["geometry"] = _geometry([nodes[s] for s in route["stops"]])
+    route["geometry"] = _draw(plan, route["stops"])
     route["distance_m"] += int(extra)
     route["load_l"] += volume
     plan["total_distance_m"] += int(extra)

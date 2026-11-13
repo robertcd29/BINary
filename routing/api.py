@@ -260,7 +260,7 @@ def _current_bins(conn):
 
 
 def _public(plan):
-    return {k: v for k, v in plan.items() if k != "_nodes"}
+    return {k: v for k, v in plan.items() if not k.startswith("_")}
 
 
 def _build_plan(conn):
