@@ -437,7 +437,7 @@ export default function App() {
 
             <NavCard n={navigation} onComplete={completeNavStop} />
 
-            <section className="map-panel">
+            <section className={`map-panel${navigation.started ? ' navigating' : ''}`}>
               <div className="map-title">
                 <div><span className="step">01</span><h2>Traseul camionului {driverId}</h2></div>
                 <span>{stops.filter(stop => !stop.done).length} opriri rămase</span>
@@ -458,6 +458,8 @@ export default function App() {
                 center={[mapCenter.lat, mapCenter.lng]}
                 zoom={14}
                 scrollWheelZoom={false}
+                // leaflet-rotate: harta se poate roti pe directia de mers; rotirea o face doar navigatia
+                {...({ rotate: true, touchRotate: false, shiftKeyRotate: false, rotateControl: false } as object)}
               >
                 <TileLayer
                   attribution="&copy; OpenStreetMap contributors"

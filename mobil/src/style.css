@@ -313,6 +313,36 @@ button:disabled {
   height: 330px;
 }
 
+/* in timpul navigatiei harta e mare, ca ecranul unui GPS; titlul si statisticile se ascund */
+.map-panel.navigating .map-title,
+.map-panel.navigating .route-stats {
+  display: none;
+}
+
+.map-panel.navigating .leaflet-container {
+  height: 62vh;
+  min-height: 360px;
+}
+
+.truck-arrow {
+  width: 34px;
+  height: 34px;
+  transition: transform 0.35s linear;
+  filter: drop-shadow(0 2px 3px #0005);
+}
+
+.truck-arrow path {
+  fill: #2463eb;
+  stroke: white;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.icon-button.active {
+  color: white;
+  background: #24845d;
+}
+
 .stop {
   display: flex;
   align-items: center;

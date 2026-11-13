@@ -1,11 +1,14 @@
 // Navigatie pas cu pas pentru sofer, ca un GPS: instructiunea urmatoare, distanta pana la viraj,
 // voce in romana, harta care urmareste camionul si recalcularea traseului cand iese de pe el.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CircleMarker, Polyline, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import { CircleMarker, Marker, Polyline, useMap } from 'react-leaflet'
 import {
-  ArrowUp, ArrowUpLeft, ArrowUpRight, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
+  ArrowUp, ArrowUpLeft, ArrowUpRight, Compass, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
   Navigation2, Play, Square, Undo2, Volume2, VolumeX
 } from 'lucide-react'
+
+type RotatableMap = L.Map & { setBearing?: (deg: number) => void }
 
 import {
   getNavigation, sendDriverPosition,
@@ -19,8 +22,28 @@ const ANNOUNCE_M = 150          // virajul se anunta cu vocea de la aceasta dist
 const TRUCK_SPEED_MS = 5.5      // ~20 km/h, viteza medie a unui camion de gunoi prin oras
 const SIM_STEP_M = 12           // simulare: cati metri inainteaza camionul la fiecare pas
 const SIM_TICK_MS = 400
+const LOOK_AHEAD_M = 25         // directia de mers se ia spre un punct aflat atat de departe pe traseu
+const NAV_ZOOM = 17
+const TRUCK_SCREEN_Y = 0.72     // camionul sta la 72% din inaltimea hartii: vezi mai mult drum in fata
 
 // ---------- geometrie ----------
+
+function bearing(a: Coordinates, b: Coordinates) {
+  const r = Math.PI / 180
+  const y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r)
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) -
+    Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r)
+  return (Math.atan2(y, x) / r + 360) % 360
+}
+
+/** Punctul aflat la `m` metri de `p`, in directia `deg`. */
+function ahead(p: Coordinates, deg: number, m: number): Coordinates {
+  const r = (deg * Math.PI) / 180
+  return {
+    lat: p.lat + (m * Math.cos(r)) / 111_320,
+    lng: p.lng + (m * Math.sin(r)) / (111_320 * Math.cos((p.lat * Math.PI) / 180))
+  }
+}
 
 function meters(a: [number, number], b: [number, number]) {
   const dy = (a[0] - b[0]) * 111_320
@@ -107,6 +130,9 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   const [simulating, setSimulating] = useState(false)
   const [simPos, setSimPos] = useState<Coordinates | null>(null)
 
+  const [headingUp, setHeadingUp] = useState(true)   // harta rotita pe directia de mers, ca la GPS
+  const lastHeading = useRef(0)
+
   const position = simulating ? simPos : gps
   const positionRef = useRef(position)
   positionRef.current = position
@@ -145,6 +171,16 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     if (!leg || cum.length < 2 || !position) return { along: 0, off: 0 }
     return project(leg.geometrie, cum, [position.lat, position.lng])
   }, [leg, cum, position])
+
+  // directia de mers: din traseu, privind 25 m inainte (mai stabil decat busola telefonului)
+  const heading = useMemo(() => {
+    if (!leg || cum.length < 2) return 0
+    const a = pointAt(leg.geometrie, cum, progress.along)
+    const b = pointAt(leg.geometrie, cum, Math.min(cum[cum.length - 1], progress.along + LOOK_AHEAD_M))
+    if (meters([a.lat, a.lng], [b.lat, b.lng]) < 1) return lastHeading.current
+    lastHeading.current = bearing(a, b)
+    return lastHeading.current
+  }, [leg, cum, progress.along])
 
   let stepIndex = 0              // ultimul pas a carui manevra a fost deja trecuta
   leg?.pasi.forEach((s, i) => { if (s.la_m <= progress.along + 5) stepIndex = i })
@@ -206,7 +242,7 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   }
 
   return {
-    nav, leg, stop, error, loading, started, voice, follow, simulating, position,
+    nav, leg, stop, error, loading, started, voice, follow, simulating, position, heading, headingUp, setHeadingUp,
     current, next, toNext, remaining, arrived, etaMin, stepIndex,
     refresh, start,
     stop_: () => { setStarted(false); setSimulating(false); window.speechSynthesis?.cancel() },
@@ -288,6 +324,16 @@ export function NavCard({ n, onComplete }: {
         <button className="icon-button" onClick={() => n.setVoice(!n.voice)} aria-label={n.voice ? 'Oprește vocea' : 'Pornește vocea'}>
           {n.voice ? <Volume2 size={18} /> : <VolumeX size={18} />}
         </button>
+        {n.started && (
+          <button
+            className={`icon-button${n.headingUp ? ' active' : ''}`}
+            onClick={() => n.setHeadingUp(!n.headingUp)}
+            aria-label={n.headingUp ? 'Harta cu nordul în sus' : 'Harta pe direcția de mers'}
+            title={n.headingUp ? 'Direcția de mers în sus' : 'Nordul în sus'}
+          >
+            <Compass size={18} />
+          </button>
+        )}
         {!n.follow && n.started && (
           <button className="icon-button" onClick={() => n.setFollow(true)} aria-label="Centrează pe camion">
             <LocateFixed size={18} />
@@ -322,17 +368,46 @@ export function NavLayer({ n }: { n: NavState }) {
     return () => { map.off('dragstart', stopFollow) }
   }, [map, n.setFollow])
 
+  const rotated = n.started && n.follow && n.headingUp
+  const mapBearing = rotated ? -n.heading : 0   // leaflet-rotate: -directia => directia de mers e in sus
+
+  useEffect(() => {
+    (map as RotatableMap).setBearing?.(mapBearing)
+  }, [map, mapBearing])
+
   useEffect(() => {
     if (!n.started || !n.follow || !n.position) return
+    const zoom = zoomed.current ? map.getZoom() : NAV_ZOOM
+    let center = n.position
+    if (rotated) {
+      // centrul hartii e in fata camionului, deci camionul apare jos si se vede drumul care urmeaza
+      const mPerPx = (156_543.03 * Math.cos((n.position.lat * Math.PI) / 180)) / 2 ** zoom
+      const shiftPx = (TRUCK_SCREEN_Y - 0.5) * map.getSize().y
+      center = ahead(n.position, n.heading, shiftPx * mPerPx)
+    }
     if (!zoomed.current) {
       zoomed.current = true
-      map.setView([n.position.lat, n.position.lng], 17, { animate: true })
+      map.setView([center.lat, center.lng], zoom, { animate: false })
     } else {
-      map.panTo([n.position.lat, n.position.lng], { animate: true, duration: 0.3 })
+      map.panTo([center.lat, center.lng], { animate: true, duration: 0.35, easeLinearity: 1 })
     }
-  }, [map, n.started, n.follow, n.position])
+  }, [map, n.started, n.follow, n.position, n.heading, rotated])
 
-  useEffect(() => { if (!n.started) zoomed.current = false }, [n.started])
+  useEffect(() => {
+    if (!n.started) zoomed.current = false
+    // harta isi schimba inaltimea cand porneste/se opreste navigatia
+    const t = setTimeout(() => map.invalidateSize(), 50)
+    return () => clearTimeout(t)
+  }, [map, n.started])
+
+  // sageata camionului: pe ecran arata directia de mers (cu harta rotita, mereu in sus)
+  const arrow = useMemo(() => L.divIcon({
+    className: '',
+    html: `<div class="truck-arrow" style="transform: rotate(${Math.round(n.heading + mapBearing)}deg)">
+      <svg viewBox="0 0 24 24" width="34" height="34"><path d="M12 2 L20 21 L12 16.5 L4 21 Z"/></svg></div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17]
+  }), [n.heading, mapBearing])
 
   if (!n.leg) return null
   return (
@@ -343,9 +418,8 @@ export function NavLayer({ n }: { n: NavState }) {
         <CircleMarker center={[n.next.lat, n.next.lng]} radius={6}
           pathOptions={{ color: '#fff', weight: 2, fillColor: '#2463eb', fillOpacity: 1 }} />
       )}
-      {n.simulating && n.position && (
-        <CircleMarker center={[n.position.lat, n.position.lng]} radius={9}
-          pathOptions={{ color: '#fff', weight: 3, fillColor: '#2463eb', fillOpacity: 1 }} />
+      {n.position && (n.started || n.simulating) && (
+        <Marker position={[n.position.lat, n.position.lng]} icon={arrow} zIndexOffset={3000} interactive={false} />
       )}
     </>
   )
