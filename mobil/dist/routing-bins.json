@@ -1,0 +1,610 @@
+{
+  "depot": {
+    "id": "depot",
+    "node": 13907511256,
+    "lat": 45.7547817,
+    "lon": 21.2506284
+  },
+  "bins": [
+    {
+      "id": "bin_000",
+      "node": 265072738,
+      "lat": 45.7377852,
+      "lon": 21.2446265,
+      "capacity_l": 1100,
+      "fill_level": 0.24,
+      "fill_rate_per_h": 0.0174,
+      "physical": true
+    },
+    {
+      "id": "bin_001",
+      "node": 25507159,
+      "lat": 45.7486145,
+      "lon": 21.2354507,
+      "capacity_l": 1100,
+      "fill_level": 0.7,
+      "fill_rate_per_h": 0.0289,
+      "physical": true
+    },
+    {
+      "id": "bin_002",
+      "node": 1867744831,
+      "lat": 45.758951,
+      "lon": 21.252208,
+      "capacity_l": 240,
+      "fill_level": 0.62,
+      "fill_rate_per_h": 0.011,
+      "physical": true
+    },
+    {
+      "id": "bin_003",
+      "node": 1840387887,
+      "lat": 45.7529675,
+      "lon": 21.2433473,
+      "capacity_l": 240,
+      "fill_level": 0.24,
+      "fill_rate_per_h": 0.0183,
+      "physical": false
+    },
+    {
+      "id": "bin_004",
+      "node": 1133482449,
+      "lat": 45.7477707,
+      "lon": 21.2270008,
+      "capacity_l": 240,
+      "fill_level": 0.68,
+      "fill_rate_per_h": 0.0345,
+      "physical": false
+    },
+    {
+      "id": "bin_005",
+      "node": 267639461,
+      "lat": 45.7439103,
+      "lon": 21.2348802,
+      "capacity_l": 240,
+      "fill_level": 0.29,
+      "fill_rate_per_h": 0.0061,
+      "physical": false
+    },
+    {
+      "id": "bin_006",
+      "node": 264512257,
+      "lat": 45.7497663,
+      "lon": 21.2529731,
+      "capacity_l": 1100,
+      "fill_level": 0.44,
+      "fill_rate_per_h": 0.0073,
+      "physical": false
+    },
+    {
+      "id": "bin_007",
+      "node": 3581040749,
+      "lat": 45.7377601,
+      "lon": 21.2412785,
+      "capacity_l": 1100,
+      "fill_level": 0.28,
+      "fill_rate_per_h": 0.0225,
+      "physical": false
+    },
+    {
+      "id": "bin_008",
+      "node": 262639775,
+      "lat": 45.7360357,
+      "lon": 21.2537328,
+      "capacity_l": 1100,
+      "fill_level": 0.22,
+      "fill_rate_per_h": 0.0099,
+      "physical": false
+    },
+    {
+      "id": "bin_009",
+      "node": 4919592639,
+      "lat": 45.755473,
+      "lon": 21.2542339,
+      "capacity_l": 1100,
+      "fill_level": 0.73,
+      "fill_rate_per_h": 0.02,
+      "physical": false
+    },
+    {
+      "id": "bin_010",
+      "node": 2051904775,
+      "lat": 45.7513698,
+      "lon": 21.2241757,
+      "capacity_l": 1100,
+      "fill_level": 0.41,
+      "fill_rate_per_h": 0.0399,
+      "physical": false
+    },
+    {
+      "id": "bin_011",
+      "node": 26310707,
+      "lat": 45.7360587,
+      "lon": 21.2263502,
+      "capacity_l": 240,
+      "fill_level": 0.53,
+      "fill_rate_per_h": 0.0082,
+      "physical": false
+    },
+    {
+      "id": "bin_012",
+      "node": 25638207,
+      "lat": 45.7492381,
+      "lon": 21.2367157,
+      "capacity_l": 240,
+      "fill_level": 0.83,
+      "fill_rate_per_h": 0.0103,
+      "physical": false
+    },
+    {
+      "id": "bin_013",
+      "node": 263149237,
+      "lat": 45.7350254,
+      "lon": 21.2267628,
+      "capacity_l": 240,
+      "fill_level": 0.77,
+      "fill_rate_per_h": 0.0198,
+      "physical": false
+    },
+    {
+      "id": "bin_014",
+      "node": 1112954238,
+      "lat": 45.7407516,
+      "lon": 21.2385,
+      "capacity_l": 240,
+      "fill_level": 0.43,
+      "fill_rate_per_h": 0.0259,
+      "physical": false
+    },
+    {
+      "id": "bin_015",
+      "node": 1454115087,
+      "lat": 45.7397968,
+      "lon": 21.2209498,
+      "capacity_l": 1100,
+      "fill_level": 0.55,
+      "fill_rate_per_h": 0.039,
+      "physical": false
+    },
+    {
+      "id": "bin_016",
+      "node": 2264477273,
+      "lat": 45.754976,
+      "lon": 21.2491049,
+      "capacity_l": 240,
+      "fill_level": 0.68,
+      "fill_rate_per_h": 0.009,
+      "physical": false
+    },
+    {
+      "id": "bin_017",
+      "node": 6274787022,
+      "lat": 45.7413259,
+      "lon": 21.2254247,
+      "capacity_l": 1100,
+      "fill_level": 0.75,
+      "fill_rate_per_h": 0.0169,
+      "physical": false
+    },
+    {
+      "id": "bin_018",
+      "node": 25530087,
+      "lat": 45.7382262,
+      "lon": 21.240846,
+      "capacity_l": 1100,
+      "fill_level": 0.47,
+      "fill_rate_per_h": 0.0209,
+      "physical": false
+    },
+    {
+      "id": "bin_019",
+      "node": 4130287181,
+      "lat": 45.7432987,
+      "lon": 21.2475894,
+      "capacity_l": 1100,
+      "fill_level": 0.93,
+      "fill_rate_per_h": 0.0317,
+      "physical": false
+    },
+    {
+      "id": "bin_020",
+      "node": 357960884,
+      "lat": 45.7390395,
+      "lon": 21.2309083,
+      "capacity_l": 240,
+      "fill_level": 0.84,
+      "fill_rate_per_h": 0.0154,
+      "physical": false
+    },
+    {
+      "id": "bin_021",
+      "node": 2051836179,
+      "lat": 45.7535592,
+      "lon": 21.223735,
+      "capacity_l": 240,
+      "fill_level": 0.23,
+      "fill_rate_per_h": 0.0317,
+      "physical": false
+    },
+    {
+      "id": "bin_022",
+      "node": 1112986405,
+      "lat": 45.7413826,
+      "lon": 21.2387322,
+      "capacity_l": 240,
+      "fill_level": 0.61,
+      "fill_rate_per_h": 0.0221,
+      "physical": false
+    },
+    {
+      "id": "bin_023",
+      "node": 2057449990,
+      "lat": 45.7541352,
+      "lon": 21.2213518,
+      "capacity_l": 240,
+      "fill_level": 0.89,
+      "fill_rate_per_h": 0.0358,
+      "physical": false
+    },
+    {
+      "id": "bin_024",
+      "node": 4919592638,
+      "lat": 45.7554574,
+      "lon": 21.2542893,
+      "capacity_l": 1100,
+      "fill_level": 0.3,
+      "fill_rate_per_h": 0.0134,
+      "physical": false
+    },
+    {
+      "id": "bin_025",
+      "node": 1867744843,
+      "lat": 45.7580576,
+      "lon": 21.2553678,
+      "capacity_l": 240,
+      "fill_level": 0.17,
+      "fill_rate_per_h": 0.022,
+      "physical": false
+    },
+    {
+      "id": "bin_026",
+      "node": 21516001,
+      "lat": 45.7447664,
+      "lon": 21.2321476,
+      "capacity_l": 240,
+      "fill_level": 0.93,
+      "fill_rate_per_h": 0.0236,
+      "physical": false
+    },
+    {
+      "id": "bin_027",
+      "node": 277706882,
+      "lat": 45.7345285,
+      "lon": 21.2253561,
+      "capacity_l": 240,
+      "fill_level": 0.21,
+      "fill_rate_per_h": 0.0216,
+      "physical": false
+    },
+    {
+      "id": "bin_028",
+      "node": 1989598154,
+      "lat": 45.7575763,
+      "lon": 21.235462,
+      "capacity_l": 240,
+      "fill_level": 0.33,
+      "fill_rate_per_h": 0.0355,
+      "physical": false
+    },
+    {
+      "id": "bin_029",
+      "node": 268020331,
+      "lat": 45.7425907,
+      "lon": 21.2406311,
+      "capacity_l": 1100,
+      "fill_level": 0.92,
+      "fill_rate_per_h": 0.0375,
+      "physical": false
+    },
+    {
+      "id": "bin_030",
+      "node": 792223260,
+      "lat": 45.7416887,
+      "lon": 21.2258639,
+      "capacity_l": 240,
+      "fill_level": 0.71,
+      "fill_rate_per_h": 0.019,
+      "physical": false
+    },
+    {
+      "id": "bin_031",
+      "node": 1984974834,
+      "lat": 45.7555737,
+      "lon": 21.2335325,
+      "capacity_l": 1100,
+      "fill_level": 0.47,
+      "fill_rate_per_h": 0.0231,
+      "physical": false
+    },
+    {
+      "id": "bin_032",
+      "node": 263149236,
+      "lat": 45.7363423,
+      "lon": 21.2310226,
+      "capacity_l": 240,
+      "fill_level": 0.31,
+      "fill_rate_per_h": 0.0072,
+      "physical": false
+    },
+    {
+      "id": "bin_033",
+      "node": 2025759478,
+      "lat": 45.7512991,
+      "lon": 21.2337693,
+      "capacity_l": 240,
+      "fill_level": 0.6,
+      "fill_rate_per_h": 0.0131,
+      "physical": false
+    },
+    {
+      "id": "bin_034",
+      "node": 263839948,
+      "lat": 45.7479888,
+      "lon": 21.2255579,
+      "capacity_l": 240,
+      "fill_level": 0.11,
+      "fill_rate_per_h": 0.0298,
+      "physical": false
+    },
+    {
+      "id": "bin_035",
+      "node": 2008645421,
+      "lat": 45.7449159,
+      "lon": 21.2372488,
+      "capacity_l": 240,
+      "fill_level": 0.29,
+      "fill_rate_per_h": 0.0367,
+      "physical": false
+    },
+    {
+      "id": "bin_036",
+      "node": 1990519988,
+      "lat": 45.7563094,
+      "lon": 21.2372698,
+      "capacity_l": 1100,
+      "fill_level": 0.16,
+      "fill_rate_per_h": 0.0133,
+      "physical": false
+    },
+    {
+      "id": "bin_037",
+      "node": 6428488575,
+      "lat": 45.738706,
+      "lon": 21.240493,
+      "capacity_l": 1100,
+      "fill_level": 0.28,
+      "fill_rate_per_h": 0.0096,
+      "physical": false
+    },
+    {
+      "id": "bin_038",
+      "node": 1864884670,
+      "lat": 45.7442532,
+      "lon": 21.2505565,
+      "capacity_l": 1100,
+      "fill_level": 0.31,
+      "fill_rate_per_h": 0.0216,
+      "physical": false
+    },
+    {
+      "id": "bin_039",
+      "node": 30987854,
+      "lat": 45.7581313,
+      "lon": 21.25399,
+      "capacity_l": 1100,
+      "fill_level": 0.26,
+      "fill_rate_per_h": 0.0084,
+      "physical": false
+    },
+    {
+      "id": "bin_040",
+      "node": 2066152007,
+      "lat": 45.7513887,
+      "lon": 21.2240267,
+      "capacity_l": 1100,
+      "fill_level": 0.4,
+      "fill_rate_per_h": 0.0194,
+      "physical": false
+    },
+    {
+      "id": "bin_041",
+      "node": 3041936165,
+      "lat": 45.7458302,
+      "lon": 21.2209526,
+      "capacity_l": 240,
+      "fill_level": 0.67,
+      "fill_rate_per_h": 0.0394,
+      "physical": false
+    },
+    {
+      "id": "bin_042",
+      "node": 267482662,
+      "lat": 45.7412091,
+      "lon": 21.2335669,
+      "capacity_l": 240,
+      "fill_level": 0.15,
+      "fill_rate_per_h": 0.0305,
+      "physical": false
+    },
+    {
+      "id": "bin_043",
+      "node": 2025759468,
+      "lat": 45.7509308,
+      "lon": 21.230543,
+      "capacity_l": 240,
+      "fill_level": 0.31,
+      "fill_rate_per_h": 0.0117,
+      "physical": false
+    },
+    {
+      "id": "bin_044",
+      "node": 261146113,
+      "lat": 45.7540694,
+      "lon": 21.2403346,
+      "capacity_l": 1100,
+      "fill_level": 0.22,
+      "fill_rate_per_h": 0.0114,
+      "physical": false
+    },
+    {
+      "id": "bin_045",
+      "node": 3931142598,
+      "lat": 45.7427458,
+      "lon": 21.2432203,
+      "capacity_l": 1100,
+      "fill_level": 0.31,
+      "fill_rate_per_h": 0.0373,
+      "physical": false
+    },
+    {
+      "id": "bin_046",
+      "node": 1978199750,
+      "lat": 45.7591086,
+      "lon": 21.2310557,
+      "capacity_l": 1100,
+      "fill_level": 0.79,
+      "fill_rate_per_h": 0.035,
+      "physical": false
+    },
+    {
+      "id": "bin_047",
+      "node": 11385684725,
+      "lat": 45.7594723,
+      "lon": 21.2285511,
+      "capacity_l": 240,
+      "fill_level": 0.14,
+      "fill_rate_per_h": 0.04,
+      "physical": false
+    },
+    {
+      "id": "bin_048",
+      "node": 10004462119,
+      "lat": 45.7533945,
+      "lon": 21.23212,
+      "capacity_l": 240,
+      "fill_level": 0.92,
+      "fill_rate_per_h": 0.0374,
+      "physical": false
+    },
+    {
+      "id": "bin_049",
+      "node": 2008645434,
+      "lat": 45.7450548,
+      "lon": 21.2387246,
+      "capacity_l": 240,
+      "fill_level": 0.24,
+      "fill_rate_per_h": 0.022,
+      "physical": false
+    },
+    {
+      "id": "bin_050",
+      "node": 4485316277,
+      "lat": 45.7420709,
+      "lon": 21.2216879,
+      "capacity_l": 240,
+      "fill_level": 0.83,
+      "fill_rate_per_h": 0.0366,
+      "physical": false
+    },
+    {
+      "id": "bin_051",
+      "node": 357951927,
+      "lat": 45.7436957,
+      "lon": 21.2304952,
+      "capacity_l": 240,
+      "fill_level": 0.42,
+      "fill_rate_per_h": 0.0395,
+      "physical": false
+    },
+    {
+      "id": "bin_052",
+      "node": 258825754,
+      "lat": 45.7493856,
+      "lon": 21.2431857,
+      "capacity_l": 1100,
+      "fill_level": 0.89,
+      "fill_rate_per_h": 0.0325,
+      "physical": false
+    },
+    {
+      "id": "bin_053",
+      "node": 31201609,
+      "lat": 45.750844,
+      "lon": 21.226965,
+      "capacity_l": 1100,
+      "fill_level": 0.46,
+      "fill_rate_per_h": 0.0385,
+      "physical": false
+    },
+    {
+      "id": "bin_054",
+      "node": 1236363778,
+      "lat": 45.7413474,
+      "lon": 21.2255296,
+      "capacity_l": 1100,
+      "fill_level": 0.23,
+      "fill_rate_per_h": 0.0154,
+      "physical": false
+    },
+    {
+      "id": "bin_055",
+      "node": 1968491505,
+      "lat": 45.7500962,
+      "lon": 21.2444425,
+      "capacity_l": 240,
+      "fill_level": 0.59,
+      "fill_rate_per_h": 0.024,
+      "physical": false
+    },
+    {
+      "id": "bin_056",
+      "node": 262615215,
+      "lat": 45.7511842,
+      "lon": 21.2565836,
+      "capacity_l": 1100,
+      "fill_level": 0.15,
+      "fill_rate_per_h": 0.0254,
+      "physical": false
+    },
+    {
+      "id": "bin_057",
+      "node": 264512129,
+      "lat": 45.7455188,
+      "lon": 21.2543969,
+      "capacity_l": 240,
+      "fill_level": 0.15,
+      "fill_rate_per_h": 0.0228,
+      "physical": false
+    },
+    {
+      "id": "bin_058",
+      "node": 2065270115,
+      "lat": 45.741563,
+      "lon": 21.2559107,
+      "capacity_l": 240,
+      "fill_level": 0.16,
+      "fill_rate_per_h": 0.0074,
+      "physical": false
+    },
+    {
+      "id": "bin_059",
+      "node": 13606006867,
+      "lat": 45.7344177,
+      "lon": 21.2377796,
+      "capacity_l": 240,
+      "fill_level": 0.44,
+      "fill_rate_per_h": 0.038,
+      "physical": false
+    }
+  ]
+}

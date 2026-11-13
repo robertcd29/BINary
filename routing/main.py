@@ -39,4 +39,7 @@ class FaraCache(StaticFiles):
 
 # dashboard-ul vine direct din repo (routing/static), deci se actualizeaza singur la fiecare push
 app.mount("/dispecer", FaraCache(directory=Path(__file__).parent / "static", html=True), name="static")
-app.mount("/", StaticFiles(directory="/home/ubuntu/frontend/mobil", html=True, check_dir=False), name="mobil")
+# aplicatia mobila (cetateni + soferi): build-ul din mobil/dist, tot din repo; fara cache,
+# ca service worker-ul sa ia imediat versiunea noua dupa un push
+app.mount("/", FaraCache(directory=Path(__file__).parent.parent / "mobil" / "dist", html=True, check_dir=False),
+          name="mobil")
