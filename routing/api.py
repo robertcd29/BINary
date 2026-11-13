@@ -233,6 +233,15 @@ def _current_bins(conn):
     bins, surse = [], {}
     for r in real:
         s = stats.get(r["id"])
+        raw = sf.valid(r["umplere"])
+        if raw is not None:
+            # rutam dupa valoarea din baza de date, exact cea de pe harta
+            fill = {"umplere": round(raw), "sursa": "senzor", "motiv": None}
+            surse[r["id"]] = fill
+            bins.append({"id": r["id"], "lat": r["lat"], "lng": r["lng"], "umplere": fill["umplere"],
+                         "capacitate_l": engine.DEFAULT_BIN_CAPACITY_L})
+            continue
+        # citire invalida in baza de date: estimam din istoric, ca sa nu ratam o pubela plina
         if s:
             level, last_good, last_any = sf.smooth(_recent_levels(conn, r["id"])), s["last_good"], s["last_any"]
         else:   # inca necitita de bucla: folosim direct valoarea din trashes

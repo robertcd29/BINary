@@ -25,6 +25,7 @@ NUM_TRUCKS = 3
 TRUCK_CAPACITY_L = 8000
 RESERVE = 0.10
 MANDATORY_FILL = 0.8
+MIN_FILL = 0.0                   # se colecteaza toate pubelele cu umplere peste acest prag
 HORIZON_H = 24
 PENALTY_SCALE = 4000
 MANDATORY_PENALTY = 10_000_000   # "obligatoriu": sarirea costa cat 10.000 km
@@ -189,11 +190,12 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         will_overflow = hours_to_full is not None and hours_to_full <= HORIZON_H
         if will_overflow:
             overflow_risk.add(node)
-        if fill >= MANDATORY_FILL or will_overflow:
+        if fill > MIN_FILL:
+            # orice pubela care are ceva in ea se colecteaza
             mandatory.add(node)
-            penalties[node] = MANDATORY_PENALTY     # o sare doar daca altfel nu exista solutie
+            penalties[node] = MANDATORY_PENALTY     # o sare doar daca nu incape in camioane
         else:
-            penalties[node] = int(PENALTY_SCALE * fill**2)
+            penalties[node] = 0                     # goala: nu merita drumul
 
     capacity = int(TRUCK_CAPACITY_L * (1 - RESERVE))
     routes, total, visited = _solve(M, demands, penalties, capacity, seconds)
