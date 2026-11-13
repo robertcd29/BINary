@@ -48,6 +48,7 @@ EMPTY_DROP = 30                 # o scadere brusca de 30+ puncte = pubela a fost
 HISTORY_SLOT = "1 minute"       # citirile se mediaza pe intervale, pentru regresie
 MIN_HISTORY_H = 1.0             # istoricul real conteaza doar daca acopera cel putin o ora
 MAX_EVENTS = 50
+FOLOSESTE_SIMULATE = False      # True = pe langa ghenele din trashes, si cele 60 de pubele din bins.json
 
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
@@ -217,7 +218,7 @@ def _current_bins(conn):
     real_ids = {r["id"] for r in real}
     sim = [r for r in conn.execute(
         "SELECT id, lat, lng, umplere, capacitate_l FROM rutare_pubele ORDER BY id").fetchall()
-        if r["id"] not in real_ids]
+        if r["id"] not in real_ids] if FOLOSESTE_SIMULATE else []
     stats = {r["bin_id"]: r for r in conn.execute(f"""
         SELECT c.bin_id, max(c.ts) FILTER (WHERE c.umplere IS NOT NULL) AS last_good, max(c.ts) AS last_any
         FROM rutare_citiri c {SINCE_EMPTY} GROUP BY c.bin_id""").fetchall()}
@@ -299,6 +300,17 @@ def _register_alert(conn, sursa, lat, lng, marime, camera_id=None):
     return {**_assign(conn, alert), "sursa": sursa, "marime": marime}
 
 
+def precalculeaza():
+    """Pornit de main.py la startup: planul e gata pana deschide cineva dashboard-ul."""
+    try:
+        with _lock, _connect() as conn:
+            if _state["plan"] is None:
+                _build_plan(conn)
+                print("rutare: planul zilei e calculat")
+    except Exception as e:
+        print("rutare: planul initial nu s-a putut calcula:", e)
+
+
 # ---------- rute ----------
 
 def _out(plan):
@@ -377,7 +389,7 @@ def pubele_fizice():
     with _connect() as conn:
         if not _has_trashes(conn):
             return []
-        return conn.execute("SELECT * FROM trashes ORDER BY id").fetchall()
+        return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
 
 
 @router.get("/pubele")
@@ -385,7 +397,24 @@ def toate_pubelele():
     """Pubelele reale si cele simulate, cu umplerea curenta, pentru harta din dashboard."""
     with _connect() as conn:
         bins, _, surse = _current_bins(conn)
-    return [{**b, "reala": b["id"] in surse} for b in bins]
+        info = {r["id"]: r for r in conn.execute("SELECT * FROM trashes").fetchall()} \
+            if _has_trashes(conn) else {}
+    out = []
+    for b in bins:
+        try:
+            _, dist_m = engine._snap(float(b["lat"]), float(b["lng"]))
+        except Exception:
+            continue
+        if dist_m > engine.MAX_SNAP_M:
+            continue                  # in afara hartii de strazi: nu poate fi pusa pe nicio ruta, deci n-o aratam
+        r = info.get(b["id"], {})     # numele si adresa vin din tabela trashes a lui Robert
+        out.append({**b, "reala": b["id"] in surse,
+                    # pe harta aratam exact valoarea din baza de date; rutarea foloseste in continuare
+                    # valoarea filtrata (b["umplere"]), ca o citire gresita sa nu trimita un camion degeaba
+                    "umplere": r.get("umplere", b["umplere"]),
+                    "umplere_rutare": b["umplere"],
+                    "nume": r.get("nume"), "adresa": r.get("adresa"), "tip": r.get("tip")})
+    return out
 
 
 # ---------- raportari de la cetateni (aplicatia lui Mihai) ----------
@@ -481,7 +510,7 @@ def compat_trashes():
     with _connect() as conn:
         if not _has_trashes(conn):
             return []
-        return conn.execute("SELECT * FROM trashes ORDER BY id").fetchall()
+        return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
 
 
 @compat.post("/rapoarte")

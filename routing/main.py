@@ -18,6 +18,7 @@ import api
 async def lifespan(app):
     stop = threading.Event()
     threading.Thread(target=api.watch, args=(stop,), daemon=True).start()
+    threading.Thread(target=api.precalculeaza, daemon=True).start()   # planul se face in fundal
     yield
     stop.set()
 

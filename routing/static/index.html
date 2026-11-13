@@ -125,7 +125,23 @@
         }
 
         .pubela.reala {
+            width: 20px;
+            height: 27px;
             box-shadow: 0 0 0 3px var(--panou), 0 0 0 5px var(--asfalt);
+        }
+
+        .pubela.simulata {
+            opacity: .45;
+        }
+
+        .info-pubela b {
+            display: block;
+            font-size: 15px;
+        }
+
+        .info-pubela span {
+            display: block;
+            color: var(--asfalt-2);
         }
 
         .depozitare {
@@ -385,6 +401,37 @@
             margin-left: 6px;
         }
 
+        .eveniment {
+            padding: 9px 0 9px 12px;
+            border-top: 1px solid var(--linie);
+            border-left: 3px solid var(--vesta);
+            font-size: 14px;
+        }
+
+        .eveniment.linistit {
+            border-left-color: var(--ok);
+        }
+
+        .eveniment time {
+            display: block;
+            font-size: 12px;
+            color: var(--asfalt-2);
+        }
+
+        .eveniment.nou {
+            animation: aprinde 2.5s ease-out;
+        }
+
+        @keyframes aprinde {
+            from {
+                background: #ffe3d1;
+            }
+
+            to {
+                background: transparent;
+            }
+        }
+
         .gol {
             color: var(--asfalt-2);
             font-size: 14px;
@@ -441,6 +488,10 @@
 
         <div class="derulare">
             <section>
+                <h2>În timp real <small>de la senzori</small></h2>
+                <ul id="evenimente"></ul>
+            </section>
+            <section>
                 <h2>Camioane <small id="nr-camioane"></small></h2>
                 <ul id="camioane"></ul>
             </section>
@@ -478,10 +529,10 @@
         legenda.onAdd = () => {
             const d = L.DomUtil.create("div", "legenda");
             d.innerHTML = `
-                <div class="rand"><span class="pubela"><i style="height:35%;background:var(--ok)"></i></span>Pubelă, umplere sub 60%</div>
+                <div class="rand"><span class="pubela"><i style="height:35%;background:var(--ok)"></i></span>Umplere sub 60%</div>
                 <div class="rand"><span class="pubela"><i style="height:72%;background:var(--atentie)"></i></span>60–85%</div>
                 <div class="rand"><span class="pubela"><i style="height:92%;background:var(--plin)"></i></span>Peste 85%</div>
-                <div class="rand"><span class="pubela reala" style="margin:0 3px"><i style="height:50%;background:var(--ok)"></i></span>Cu senzor real</div>
+                <div class="rand"><span class="pubela reala" style="margin:0 3px"><i style="height:50%;background:var(--ok)"></i></span>Ghenă reală, cu adresă</div>
                 <div class="rand"><span class="depozitare" style="margin:0 2px"></span>Depozitare ilegală</div>`;
             return d;
         };
@@ -493,10 +544,11 @@
 
         function iconPubela(umplere, reala) {
             const p = Math.max(0, Math.min(100, Math.round(umplere ?? 0)));
+            const [w, h] = reala ? [20, 27] : [14, 19];
             return L.divIcon({
                 className: "",
-                html: `<div class="pubela${reala ? " reala" : ""}"><i style="height:${p}%;background:${culoareUmplere(p)}"></i></div>`,
-                iconSize: [14, 19], iconAnchor: [7, 19], tooltipAnchor: [8, -10],
+                html: `<div class="pubela ${reala ? "reala" : "simulata"}"><i style="height:${p}%;background:${culoareUmplere(p)}"></i></div>`,
+                iconSize: [w, h], iconAnchor: [w / 2, h], tooltipAnchor: [w / 2 + 2, -h / 2],
             });
         }
 
@@ -534,6 +586,7 @@
 
         // ---------- desenare ----------
         function deseneazaRute(plan) {
+            deseneazaEvenimente(plan.evenimente);
             stratRute.clearLayers();
             plan.routes.forEach((r, i) => {
                 const culoare = CULORI_CAMIOANE[i % CULORI_CAMIOANE.length];
@@ -564,12 +617,26 @@
             document.getElementById("km-total").textContent = (plan.total_distance_m / 1000).toFixed(1);
         }
 
+        const numePubele = {};      // id -> nume, pentru fluxul de evenimente
+
         function deseneazaPubele(lista) {
             stratPubele.clearLayers();
+            lista.forEach(p => { numePubele[p.id] = p.nume || p.id; });
             lista.forEach(p => {
-                L.marker([p.lat, p.lng ?? p.lon], { icon: iconPubela(p.umplere, p.reala) })
-                    .bindTooltip(`${p.id}: ${Math.round(p.umplere ?? 0)}%${p.reala ? ", senzor real" : ""}`)
-                    .addTo(stratPubele);
+                const m = L.marker([p.lat, p.lng ?? p.lon], {
+                    icon: iconPubela(p.umplere, p.reala),
+                    zIndexOffset: p.reala ? 1000 : 0,          // ghenele reale deasupra celor simulate
+                });
+                if (p.reala) {
+                    const info = element("div", "info-pubela");
+                    info.append(element("b", "", p.nume || p.id),
+                        element("span", "", p.adresa || "Adresă necunoscută"),
+                        element("span", "", `Umplere: ${Math.round(p.umplere ?? 0)}%`));
+                    m.bindTooltip(info);
+                } else {
+                    m.bindTooltip(`Pubelă simulată ${p.id}: ${Math.round(p.umplere ?? 0)}%`);
+                }
+                m.addTo(stratPubele);
             });
             document.getElementById("nr-pline").textContent = lista.filter(p => p.umplere >= 85).length;
         }
@@ -635,20 +702,76 @@
             });
         }
 
+        // ---------- evenimente de la senzori ----------
+        const vazute = new Set();
+        let primeleEvenimente = true;
+
+        function textEveniment(e) {
+            const nume = numePubele[e.id] || e.id;
+            if (e.status === "golita") return [`${nume} a fost golită.`, true];
+            if (e.status === "assigned") return [`${nume} a trecut de 80% și a fost adăugată pe ruta camionului ${e.truck + 1}`
+                + (e.extra_m ? ` (+${(e.extra_m / 1000).toFixed(1)} km).` : "."), false];
+            if (e.status === "pending") return [`${nume} a trecut de 80%, dar niciun camion nu mai are loc azi.`, false];
+            if (e.status === "rejected") return [`${nume} a trecut de 80%, dar nu poate fi adăugată pe o rută (${e.reason}).`, false];
+            if (e.reason === "e deja pe o ruta") return [`${nume} a trecut de 80%. E deja pe ruta de azi.`, false];
+            if (e.status === "urgenta") return [`${nume} a trecut de 80%. Intră în primul plan calculat.`, false];
+            return [`${nume}: ${e.status}`, true];
+        }
+
+        function deseneazaEvenimente(evenimente = []) {
+            const lista = document.getElementById("evenimente");
+            lista.replaceChildren();
+            if (!evenimente.length) {
+                lista.append(element("li", "gol", "Nimic nou încă. Când o ghenă cu senzor trece de 80% sau e golită, apare aici."));
+                return;
+            }
+            [...evenimente].reverse().slice(0, 6).forEach(e => {
+                const cheie = `${e.id}|${e.status}|${e.la}`;
+                const [text, linistit] = textEveniment(e);
+                const li = element("li", `eveniment${linistit ? " linistit" : ""}`);
+                if (!primeleEvenimente && !vazute.has(cheie)) li.classList.add("nou");
+                vazute.add(cheie);
+                const cand = element("time", "", new Date(e.la).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
+                li.append(cand, element("span", "", text));
+                lista.append(li);
+            });
+            primeleEvenimente = false;
+        }
+
         // ---------- reimprospatare ----------
+        let ruteInCurs = false;     // cererea pentru rute poate dura cat se calculeaza planul
+        let areRute = false;
+
+        function ora() {
+            return new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+        }
+
         async function actualizeaza(plan) {
-            const [p, alerte, planCurent] = await Promise.all([
-                pubele(), cere("GET", "/api/alerte"), plan ? Promise.resolve(plan) : cere("GET", "/api/rute"),
-            ]);
-            deseneazaRute(planCurent);
+            // pubelele si depozitarile apar imediat; rutele vin separat, cand sunt gata
+            const [p, alerte] = await Promise.all([pubele(), cere("GET", "/api/alerte")]);
             deseneazaPubele(p);
             deseneazaDepozitari(alerte);
             if (primaIncarcare && p.length) {
                 harta.fitBounds(p.map(x => [x.lat, x.lng ?? x.lon]), { padding: [40, 40] });
                 primaIncarcare = false;
             }
-            const ora = new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
-            seteazaStatus(`Actualizat la ${ora}. Se reîmprospătează singur.`);
+
+            if (plan) {
+                deseneazaRute(plan);
+                areRute = true;
+            } else if (!ruteInCurs) {
+                ruteInCurs = true;
+                if (!areRute) seteazaStatus("Se calculează rutele de azi, poate dura până la un minut…");
+                cere("GET", "/api/rute")
+                    .then(pl => {
+                        deseneazaRute(pl);
+                        areRute = true;
+                        seteazaStatus(`Actualizat la ${ora()}. Se reîmprospătează singur.`);
+                    })
+                    .catch(e => seteazaStatus(`Rutele nu s-au putut încărca (${e.message}). Reîncerc în 10 secunde.`, true))
+                    .finally(() => { ruteInCurs = false; });
+            }
+            if (areRute) seteazaStatus(`Actualizat la ${ora()}. Se reîmprospătează singur.`);
         }
 
         function seteazaStatus(text, eroare = false) {
