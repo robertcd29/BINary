@@ -690,6 +690,7 @@
 
     <script>
         const REIMPROSPATARE_MS = 5000;
+        const POZITII_MS = 2000;                   // camioanele se misca pe harta la fiecare 2 secunde
         const ASCUNDE_COLECTATE_MS = 7 * 60_000;   // raportarile colectate dispar din tab dupa 7 minute
         const CULORI = ["#2b59d9", "#7a4bc2", "#0e8c82", "#b5487a", "#5b6b1f", "#c46a1b"];
         const CAPACITATE_L = 8000;              // un camion, ca in motorul de rutare
@@ -1296,6 +1297,10 @@
             if (!ok) return;
             porneste();
             setInterval(porneste, REIMPROSPATARE_MS);
+            // separat de restul (care e mai greu de cerut): doar pozitiile GPS ale camioanelor
+            setInterval(() => {
+                cere("GET", "/api/pozitii").then(p => { stare.pozitii = p; deseneazaCamioane(); }).catch(() => {});
+            }, POZITII_MS);
         }).catch(e => ecranAcces(`Loginul nu a mers (${e.message}). Reîncarcă pagina.`));
     </script>
 </body>

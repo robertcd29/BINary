@@ -420,6 +420,10 @@ def _assign(conn, alert):
         return {"id": alert["id"], "status": "deschisa", "reason": "inca nu exista un plan al zilei"}
     r = engine.add_alert(plan, {"id": alert["id"], "lat": alert["lat"], "lng": alert["lng"],
                                 "volum_l": alert["volum_l"], "camioane": CAMIOANE_MENAJERE})
+    if r["status"] == "assigned":
+        # inserarea cauta cel mai bun loc in toata ruta, inclusiv printre opririle deja facute;
+        # refacem ordinea opririlor ramase pornind de unde e camionul acum
+        _reordoneaza_camion(r["truck"])
     status = {"assigned": "asignata", "rejected": "respinsa"}.get(r["status"], "deschisa")
     conn.execute("UPDATE rutare_alerte SET status = %s, camion = %s WHERE id = %s",
                  (status, r.get("truck"), alert["id"]))
@@ -560,20 +564,25 @@ def golita(bin_id: str, date: dict | None = Depends(cere_rol("sofer", "admin")))
     return {"status": "ok"}
 
 
-def _dupa_bifare(sid):
-    """Soferul a bifat o oprire: opririle ramase ale camionului lui se reordoneaza de unde e acum."""
+def _reordoneaza_camion(truck):
+    """Opririle ramase ale camionului se reordoneaza pornind de unde e acum (GPS) sau de la ultima oprire facuta."""
     plan = _state["plan"]
     if plan is None:
         return
-    r = next((x for x in plan["routes"] if sid in x["stops"]), None)
-    if r is None:
-        return
-    poz = _state["pozitii"].get(r["truck"])
+    poz = _state["pozitii"].get(truck)
     proaspat = poz and (datetime.now(timezone.utc) - datetime.fromisoformat(poz["la"])).total_seconds() < 120
     try:
-        engine.reordoneaza(plan, r["truck"], _state["facute"], (poz["lat"], poz["lng"]) if proaspat else None)
-    except Exception as e:          # reordonarea e un bonus: daca pica, ruta ramane cea de dimineata
+        engine.reordoneaza(plan, truck, _state["facute"], (poz["lat"], poz["lng"]) if proaspat else None)
+    except Exception as e:          # reordonarea e un bonus: daca pica, ruta ramane cum era
         print("rutare: reordonarea a esuat:", e)
+
+
+def _dupa_bifare(sid):
+    """Soferul a bifat o oprire: opririle ramase ale camionului lui se reordoneaza de unde e acum."""
+    plan = _state["plan"]
+    r = plan and next((x for x in plan["routes"] if sid in x["stops"]), None)
+    if r is not None:
+        _reordoneaza_camion(r["truck"])
 
 
 

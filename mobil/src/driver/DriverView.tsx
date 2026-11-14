@@ -9,10 +9,11 @@ import {
   type DriverRoute, type NavStop, type RouteStop
 } from '../api'
 import { fillColor, formatDistance, TIMISOARA, useGeolocation } from '../lib'
-import { NavCard, NavLayer, type NavState, useNavigation } from '../Navigatie'
+import { NavCard, NavLayer, type NavState, speak, useNavigation } from '../Navigatie'
 
 export const TRUCK_COLORS = ['#2b59d9', '#7a4bc2', '#0e8c82', '#b5487a', '#5b6b1f', '#c46a1b']   // ca pe dashboard, un camion pe culoare
-const SEND_EVERY_MS = 5000
+const SEND_EVERY_MS = 2000     // pozitia ajunge la dispecer la fiecare 2 secunde
+const ROUTE_CHECK_MS = 10_000  // cat de des verificam daca dispecerul a pus opriri noi pe ruta
 
 function FitRoute({ route }: { route: [number, number][] }) {
   const map = useMap()
@@ -34,7 +35,27 @@ export function useDriver(truckId: string) {
 
   useEffect(() => { loadRoute() }, [loadRoute])
 
-  // pozitia ajunge la dispecer, cel mult o data la 5 secunde
+  // un raport nou (sau o reordonare) schimba opririle: reincarcam ruta si navigatia
+  const stopsKey = route ? route.opriri.filter(o => !o.facuta).map(o => o.id).join(',') : null
+  const lastKey = useRef<string | null>(null)
+  const refreshNav = navigation.refresh
+  useEffect(() => {
+    const id = setInterval(loadRoute, ROUTE_CHECK_MS)
+    return () => clearInterval(id)
+  }, [loadRoute])
+  useEffect(() => {
+    if (stopsKey === null) return
+    const before = lastKey.current
+    lastKey.current = stopsKey
+    if (before === null || before === stopsKey) return
+    const noi = stopsKey.split(',').filter(id => !before.split(',').includes(id))
+    if (noi.length && navigation.started && navigation.voice) {
+      speak('Rută actualizată: o oprire nouă')
+    }
+    refreshNav()
+  }, [stopsKey, refreshNav, navigation.started, navigation.voice])
+
+  // pozitia ajunge la dispecer, cel mult o data la 2 secunde
   const lastSent = useRef(0)
   useEffect(() => {
     if (!geo.position || Date.now() - lastSent.current < SEND_EVERY_MS) return
@@ -68,8 +89,6 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
         </div>
       )}
 
-      <NavCard n={n} onComplete={(s: NavStop) => d.complete(s)} />
-
       <section className={`map-panel${n.started ? ' navigating' : ''}${n.tilted ? ' tilted' : ''}`}>
         <div className="map-viewport">
           <MapContainer
@@ -98,6 +117,8 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
             <NavLayer n={n} />
           </MapContainer>
         </div>
+        {/* cardul cu oprirea si butoanele sta peste harta, jos */}
+        <NavCard n={n} onComplete={(s: NavStop) => d.complete(s)} />
       </section>
     </div>
   )

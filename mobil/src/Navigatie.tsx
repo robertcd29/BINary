@@ -28,7 +28,7 @@ const TRUCK_SPEED_MS = 5.5      // ~20 km/h, viteza medie a unui camion de gunoi
 const SIM_STEP_M = 20           // simulare: cati metri inainteaza camionul la fiecare pas (~180 km/h, ca demo-ul sa nu dureze)
 const SIM_TICK_MS = 400
 const LOOK_AHEAD_M = 25         // directia de mers se ia spre un punct aflat atat de departe pe traseu
-const NAV_ZOOM = 17
+const NAV_ZOOM = 18           // zoom-ul in navigatie: de aproape, ca strada si intersectia sa se vada bine
 const TRUCK_SCREEN_Y = 0.62     // camionul sta la 62% din inaltimea hartii: vezi drumul din fata, deasupra cardului de jos
 
 // ---------- geometrie ----------
@@ -111,7 +111,7 @@ function ManeuverIcon({ tip, size = 34 }: { tip: NavStep['tip']; size?: number }
   }
 }
 
-function speak(text: string) {
+export function speak(text: string) {
   if (!('speechSynthesis' in window)) return
   window.speechSynthesis.cancel()
   const u = new SpeechSynthesisUtterance(text)
