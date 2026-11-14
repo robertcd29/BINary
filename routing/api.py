@@ -395,6 +395,8 @@ def _build_plan(conn):
     for bid, s in surse.items():
         if s["sursa"] != "senzor":
             plan["warnings"].append(f"{bid}: {s['motiv']}")
+    for r in plan["routes"]:
+        r["tip"] = TIP_CAMION.get(r["truck"], "menajer")   # dashboard-ul deseneaza punctat rutele de reciclabile
     _state.update(plan=plan, bins=bins, surse=surse, facute=set())
     pe_ruta = {s: r["truck"] for r in plan["routes"] for s in r["stops"]}
     for a in alerte:

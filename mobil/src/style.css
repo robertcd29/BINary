@@ -774,6 +774,6 @@ body.nav-active .content { padding-top: calc(var(--nav-bar-h, 100px) + 12px); pa
 
 .truck-plate { height: 36px; display: inline-flex; align-items: center; padding: 0 10px; border: 2px solid var(--route); border-radius: 8px; background: var(--surface); font-weight: 800; letter-spacing: .04em; font-size: 14px; }
 
-/* ghenele de reciclabile: chenar si fundal albastru, ca pe dashboard */
-.bin-pin.reciclabil { background: #1d6fd6; border-color: #0b3d80; color: #fff; }
-.bin-pin.reciclabil.selected { color: #fff; background: #0b3d80; border-color: #0b3d80; }
+/* ghenele de reciclabile: contur verde deschis, ca pe dashboard */
+.bin-pin.reciclabil { border: 2px solid #57d36b; }
+.bin-pin.reciclabil.selected { border-color: #57d36b; }
