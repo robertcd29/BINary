@@ -136,7 +136,12 @@ def _trashes(conn):
         x = None if src is None else sf.valid(src["umplere"])
         if x is None:
             continue                     # senzor lipsa sau citire invalida: ramane valoarea fixa
-        r["umplere"] = round(min(max(f(x), 0), 100))
+        noua = round(min(max(f(x), 0), 100))
+        if noua != r["umplere"]:
+            # valoarea calculata ajunge si in baza de date, ca toata echipa sa vada aceeasi umplere
+            conn.execute("UPDATE trashes SET umplere = %s, actualizat = %s WHERE id = %s",
+                         (noua, src["actualizat"], r["id"]))
+        r["umplere"] = noua
         r["actualizat"] = src["actualizat"]   # o citire noua a senzorului = o citire noua aici
     return rows
 
@@ -170,6 +175,13 @@ def init_db():
                    VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
                 [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["capacity_l"])
                  for b in sim])
+            # si in tabela trashes a backend-ului, ca ghenele simulate sa arate peste tot ca unele reale
+            if conn.execute("SELECT to_regclass('trashes') IS NOT NULL AS ok").fetchone()["ok"]:
+                cur.executemany(
+                    """INSERT INTO trashes (id, lat, lng, umplere, actualizat, nume, adresa, tip)
+                       VALUES (%s, %s, %s, %s, now(), %s, %s, 'ghena') ON CONFLICT (id) DO NOTHING""",
+                    [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["nume"], b["adresa"])
+                     for b in sim])
 
 
 init_db()
@@ -335,7 +347,7 @@ def _current_bins(conn):
             fill = {"umplere": round(raw), "sursa": "senzor", "motiv": None}
             surse[r["id"]] = fill
             bins.append({"id": r["id"], "lat": r["lat"], "lng": r["lng"], "umplere": fill["umplere"],
-                         "capacitate_l": engine.DEFAULT_BIN_CAPACITY_L})
+                         "capacitate_l": SIM.get(r["id"], {}).get("capacity_l", engine.DEFAULT_BIN_CAPACITY_L)})
             continue
         # citire invalida in baza de date: estimam din istoric, ca sa nu ratam o pubela plina
         if s:
@@ -348,7 +360,7 @@ def _current_bins(conn):
         fill = sf.routing_fill(level, last_good, last_any, now, None if rate is None else rate * 100)
         surse[r["id"]] = fill
         bins.append({"id": r["id"], "lat": r["lat"], "lng": r["lng"], "umplere": fill["umplere"],
-                     "capacitate_l": engine.DEFAULT_BIN_CAPACITY_L})
+                     "capacitate_l": SIM.get(r["id"], {}).get("capacity_l", engine.DEFAULT_BIN_CAPACITY_L)})
     for r in sim:
         bins.append({"id": r["id"], "lat": r["lat"], "lng": r["lng"], "umplere": r["umplere"],
                      "capacitate_l": r["capacitate_l"] or engine.DEFAULT_BIN_CAPACITY_L})
@@ -491,6 +503,10 @@ def reset_demo():
             cur.executemany("""UPDATE rutare_pubele SET umplere = %s, actualizat = now(), golita_la = NULL
                                WHERE id = %s""",
                             [(round(b["fill_level"] * 100), b["id"]) for b in SIM.values()])
+        if _has_trashes(conn):
+            with conn.cursor() as cur:
+                cur.executemany("UPDATE trashes SET umplere = %s, actualizat = now() WHERE id = %s",
+                                [(round(b["fill_level"] * 100), b["id"]) for b in SIM.values()])
         conn.execute("DELETE FROM rutare_golire WHERE bin_id = ANY(%s)", (list(SIM),))
         conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
                         WHERE status IN ('deschisa', 'asignata')""")
@@ -512,13 +528,16 @@ def golita(bin_id: str, date: dict | None = Depends(cere_rol("sofer", "admin")))
         _verifica_oprire(date, bin_id)
         found = conn.execute("UPDATE rutare_pubele SET umplere = 0, actualizat = now() WHERE id = %s",
                              (bin_id,)).rowcount
+        if _has_trashes(conn):
+            if bin_id in SENZORI:
+                # ghena cu senzor real: golirea o confirma senzorul, nu scriem peste citirea lui
+                found = found or conn.execute("SELECT 1 FROM trashes WHERE id = %s", (bin_id,)).fetchone()
+            else:
+                # ghena simulata sau hardcodata: golirea se vede in baza de date, ca la una reala
+                found = conn.execute("UPDATE trashes SET umplere = 0, actualizat = now() WHERE id = %s",
+                                     (bin_id,)).rowcount or found
         if not found:
-            # ghena reala (din trashes): nu scriem in tabela lui Robert, doar marcam golirea la noi;
-            # istoricul de umplere porneste de la zero, iar senzorul confirma golirea la urmatoarea citire
-            real = _has_trashes(conn) and conn.execute(
-                "SELECT 1 FROM trashes WHERE id = %s", (bin_id,)).fetchone()
-            if not real:
-                raise HTTPException(404, "Ghena nu exista")
+            raise HTTPException(404, "Ghena nu exista")
         conn.execute("""INSERT INTO rutare_golire (bin_id, golita_la) VALUES (%s, now())
                         ON CONFLICT (bin_id) DO UPDATE SET golita_la = EXCLUDED.golita_la""", (bin_id,))
         _state["urgent"][bin_id] = False
