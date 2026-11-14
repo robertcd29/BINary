@@ -38,7 +38,7 @@ import routing_engine as engine
 import sensor_filter as sf
 from explain import explain_plan
 from predict import estimate
-from filtru_gemini import verifica
+from filtru_gemini import pregateste, verifica
 
 load_dotenv()
 DATABASE_URL = os.environ["DATABASE_URL"]
@@ -462,7 +462,8 @@ STATUS_APLICATIE = {"assigned": "pe_ruta", "duplicat": "duplicat"}
 def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
     """Gemini verifica poza; daca e gunoi, intra ca orice alerta (duplicate, inserare in ruta)."""
     try:
-        imagine = Image.open(io.BytesIO(poza.file.read())).convert("RGB")
+        # intoarsa dupa EXIF inainte de orice conversie (altfel orientarea de pe telefon se pierde)
+        imagine = pregateste(Image.open(io.BytesIO(poza.file.read())))
     except Exception:
         raise HTTPException(400, "Fișierul trimis nu e o imagine")
     try:
@@ -470,7 +471,7 @@ def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: f
     except Exception:
         raise HTTPException(503, "Verificarea pozei nu merge acum, încearcă din nou")
     if not verdict["e_gunoi"]:
-        return {"acceptat": False, "motiv": verdict["descriere"]}
+        return {"acceptat": False, "motiv": verdict.get("motiv") or verdict["descriere"]}
 
     with _lock, _connect() as conn:
         r = _register_alert(conn, "cetatean", lat, lng, verdict["marime"])
