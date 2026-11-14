@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -34,7 +34,8 @@
             --full-soft: #fbe8e6;
             --route: #2b59d9;
             --radius: 10px;
-            --font: "Archivo", system-ui, -apple-system, sans-serif;
+            --font: "Barlow", system-ui, -apple-system, sans-serif;
+            --font-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
             --mono: ui-monospace, "SF Mono", Menlo, monospace;
         }
 
@@ -57,7 +58,7 @@
         :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
         .num { font-variant-numeric: tabular-nums; }
-        .cond { font-stretch: 78%; }
+        .cond { font-family: var(--font-cond); }
         .icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
         .app {
@@ -97,7 +98,7 @@
         .brand-name {
             font-size: 22px;
             font-weight: 800;
-            font-stretch: 80%;
+            font-family: var(--font-cond);
             letter-spacing: -.01em;
             line-height: 1;
         }
@@ -182,7 +183,7 @@
         .kpi-value {
             font-size: 34px;
             font-weight: 700;
-            font-stretch: 78%;
+            font-family: var(--font-cond);
             line-height: 1.05;
             font-variant-numeric: tabular-nums;
             letter-spacing: -.01em;
@@ -480,7 +481,7 @@
         .bin-name { overflow: hidden; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
         .bin-addr { overflow: hidden; color: var(--muted); font-size: 12.5px; white-space: nowrap; text-overflow: ellipsis; }
         .bin-fill { grid-row: span 2; text-align: right; }
-        .bin-pct { font-size: 18px; font-weight: 700; font-stretch: 78%; font-variant-numeric: tabular-nums; }
+        .bin-pct { font-size: 18px; font-weight: 700; font-family: var(--font-cond); font-variant-numeric: tabular-nums; }
 
         .meter {
             height: 5px;
@@ -585,6 +586,7 @@
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
         <symbol id="i-truck" viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></symbol>
         <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+        <symbol id="i-fuel" viewBox="0 0 24 24"><path d="M3 22h12"/><path d="M4 9h10"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 4 0V9.83a2 2 0 0 0-.59-1.42L18 5"/></symbol>
         <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></symbol>
         <symbol id="i-bin" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
         <symbol id="i-flag" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
@@ -599,7 +601,7 @@
                 <div class="brand-mark"><svg class="icon" style="stroke:#fff"><use href="#i-bin"/></svg></div>
                 <div>
                     <div class="brand-name">BIN<b>ary</b></div>
-                    <div class="brand-sub" id="azi">Dispecerat Timișoara</div>
+                    <div class="brand-sub" id="azi">RETIM</div>
                 </div>
             </div>
             <div class="live" id="live" aria-live="polite"><span class="live-dot"></span><span id="status">Se conectează…</span></div>
@@ -620,7 +622,7 @@
                 <div class="kpi-sub">&nbsp;</div>
             </div>
             <div class="kpi" id="k-co2" title="Camion de gunoi diesel: ~0,7 L/km, 2,68 kg CO₂ pe litru">
-                <div class="kpi-label"><svg class="icon"><use href="#i-leaf"/></svg>CO₂ evitat azi</div>
+                <div class="kpi-label"><svg class="icon"><use href="#i-fuel"/></svg>Motorină economisită azi</div>
                 <div class="kpi-value cond">–</div>
                 <div class="kpi-sub">&nbsp;</div>
             </div>
@@ -673,7 +675,8 @@
         const REIMPROSPATARE_MS = 5000;
         const CULORI = ["#2b59d9", "#7a4bc2", "#0e8c82", "#b5487a", "#5b6b1f"];
         const CAPACITATE_L = 8000;              // un camion, ca in motorul de rutare
-        const KG_CO2_PE_KM = 0.7 * 2.68;        // ~0,7 L motorina/km, 2,68 kg CO2/L
+        const L_PE_KM = 0.7;                    // camion de gunoi diesel: ~0,7 L motorina/km
+        const KG_CO2_PE_L = 2.68;               // arderea unui litru de motorina
         const STARE_ALERTA = { deschisa: "Nouă", asignata: "Pe rută", colectata: "Colectată", duplicat: "Duplicat" };
 
         // ---------- utilitare ----------
@@ -884,7 +887,7 @@
                 }
                 setKpi("k-km", fmt(m.total_km, 1), sub, "km");
                 const kmEconomisiti = Math.max(0, (m.baseline_km ?? m.total_km) - m.total_km);
-                setKpi("k-co2", fmt(kmEconomisiti * KG_CO2_PE_KM), `~${fmt(kmEconomisiti * 0.7)} L motorină economisiți`, "kg");
+                setKpi("k-co2", fmt(kmEconomisiti * L_PE_KM), `${fmt(kmEconomisiti * L_PE_KM * KG_CO2_PE_L)} kg CO₂ evitat`, "L");
                 const live = pozitii.filter(p => Date.now() - new Date(p.la) < 120_000).length;
                 setKpi("k-camioane", `${m.trucks_used}`, live ? `${live} cu GPS activ acum` : "niciun GPS activ acum", `/ ${plan.routes.length}`);
             }
@@ -1162,8 +1165,14 @@
             actualizeaza().catch(e => seteazaStatus(`Fără legătură cu serverul (${e.message}). Reîncerc…`, true));
         }
 
-        $("#azi").textContent = "Dispecerat Timișoara · " +
-            new Date().toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long" });
+        function ceas() {
+            const acum = new Date();
+            $("#azi").textContent = "RETIM · " +
+                acum.toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) +
+                " · " + acum.toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+        }
+        ceas();
+        setInterval(ceas, 1000);
         porneste();
         setInterval(porneste, REIMPROSPATARE_MS);
     </script>

@@ -32,66 +32,16 @@ MANDATORY_PENALTY = 10_000_000   # "obligatoriu": sarirea costa cat 10.000 km
 DEFAULT_BIN_CAPACITY_L = 1100
 MAX_SNAP_M = 300                 # peste aceasta distanta, punctul e in afara hartii
 SOLVER_SECONDS = 3               # suficient pentru ~60 de pubele; 30 pentru cifre de pitch
-BASELINE_SECONDS = 10            # referinta se calculeaza rar, deci isi permite mai mult timp
+BASELINE_SECONDS = 5             # referinta e doar prima solutie, gata in sub o secunda
 ALERT_SIZES_L = {"mica": 100, "medie": 500, "mare": 1500}   # raportari de la cetateni
 
 _G = ox.load_graphml(GRAPH_FILE)
-_REV = _G.reverse(copy=False)
-_IDS = np.array(list(_G.nodes))
-_LATS = np.array([_G.nodes[i]["y"] for i in _IDS])
-_LONS = np.array([_G.nodes[i]["x"] for i in _IDS])
 _baseline_cache = {}
+_FARA_DRUM = 10**8              # "distanta" intre doua puncte fara drum legal intre ele
+_COS = np.cos(np.radians(DEPOT["lat"]))
 
 
 # ---------- harta ----------
-
-def _snap(lat, lng):
-    """Intersectia cea mai apropiata si distanta pana la ea, in metri."""
-    dy = (_LATS - lat) * 111_000
-    dx = (_LONS - lng) * 111_000 * np.cos(np.radians(lat))
-    d2 = dx**2 + dy**2
-    k = int(np.argmin(d2))
-    return int(_IDS[k]), float(np.sqrt(d2[k]))
-
-
-@lru_cache(maxsize=512)
-def _from(src):
-    """Distantele si drumurile de la un nod spre toate celelalte (harta nu se schimba, deci se pot refolosi)."""
-    return nx.single_source_dijkstra(_G, src, weight="length")
-
-
-@lru_cache(maxsize=512)
-def _to(dst):
-    """Distantele de la toate nodurile spre un nod (graful inversat, din cauza sensurilor unice)."""
-    return nx.single_source_dijkstra_path_length(_REV, dst, weight="length")
-
-
-def _dist(a, b):
-    return _from(a)[0][b]
-
-
-def _matrix(graph_nodes):
-    return np.array([[round(_dist(a, b)) for b in graph_nodes] for a in graph_nodes], dtype=int)
-
-
-def _geometry(stop_nodes, stop_points=None):
-    """Coordonatele [lat, lng] ale strazilor parcurse intre opriri, pentru desenat pe harta.
-
-    stop_points[i] = pozitia reala a opririi i (sau None). Camionul opreste la intersectia cea
-    mai apropiata, deci desenam si drumul pana la pubela si inapoi, ca ruta sa treaca prin ea.
-    """
-    coords = []
-    for i, (a, b) in enumerate(zip(stop_nodes, stop_nodes[1:]), start=1):
-        path = _from(a)[1][b]
-        pts = [[_G.nodes[n]["y"], _G.nodes[n]["x"]] for n in path]
-        coords.extend(pts if not coords else pts[1:])
-        p = stop_points[i] if stop_points and i < len(stop_nodes) - 1 else None
-        if p:
-            coords.extend([list(p), pts[-1]])
-    return coords
-
-
-# ---------- navigatie pas cu pas, pentru aplicatia soferului ----------
 
 def _m(a, b):
     """Distanta aproximativa in metri intre doua puncte [lat, lng] (suficient la scara unui oras)."""
@@ -100,17 +50,9 @@ def _m(a, b):
     return float(np.hypot(dx, dy))
 
 
-def _bearing(a, b):
-    """Directia de mers de la a la b, in grade (0 = nord, 90 = est)."""
-    la1, la2 = np.radians(a[0]), np.radians(b[0])
-    dl = np.radians(b[1] - a[1])
-    x = np.sin(dl) * np.cos(la2)
-    y = np.cos(la1) * np.sin(la2) - np.sin(la1) * np.cos(la2) * np.cos(dl)
-    return float(np.degrees(np.arctan2(x, y)) % 360)
-
-
-def _edge_points(u, v):
-    """Forma reala a strazii dintre doua noduri (cu curbe), plus numele ei."""
+def _edge_geom(u, v):
+    """Forma reala a strazii u -> v (cu curbe), orientata de la u la v, plus lungimea si numele ei.
+    Intre doua noduri pot fi mai multe strazi: luam cea mai scurta, ca Dijkstra."""
     d = min(_G.get_edge_data(u, v).values(), key=lambda e: e.get("length", 0))
     a, b = [_G.nodes[u]["y"], _G.nodes[u]["x"]], [_G.nodes[v]["y"], _G.nodes[v]["x"]]
     pts = [[y, x] for x, y in d["geometry"].coords] if "geometry" in d else [a, b]
@@ -119,7 +61,148 @@ def _edge_points(u, v):
     name = d.get("name")
     if isinstance(name, list):
         name = name[0]
-    return pts, name or "strada fără nume"
+    return pts, float(d.get("length", 0)), name or "strada fără nume"
+
+
+# fiecare strada (cu sensul ei) taiata in segmente drepte, pentru gasit rapid strada cea mai apropiata
+_EDGES = []                     # (u, v, puncte, distanta cumulata pe strada la fiecare punct, nume)
+_seg = []                       # (index strada, punct start, punct final, distanta la start)
+for _u, _v in {(u, v) for u, v, _ in _G.edges(keys=True)}:
+    _pts, _len, _name = _edge_geom(_u, _v)
+    _geo = [_m(p, q) for p, q in zip(_pts, _pts[1:])]
+    _k = _len / sum(_geo) if sum(_geo) else 0      # lungimile din graf, ca distantele sa se potriveasca
+    _cum = np.concatenate([[0], np.cumsum(_geo) * _k]).tolist()
+    for _i in range(len(_pts) - 1):
+        _seg.append((len(_EDGES), *_pts[_i], *_pts[_i + 1], _cum[_i], _cum[_i + 1]))
+    _EDGES.append((_u, _v, _pts, _cum, _name))
+_SEG = np.array(_seg)
+del _seg
+
+
+def _snap_all(lat, lng):
+    """Strazile (cu sens) cele mai apropiate de punct: [(distanta_m, oprire)], cea mai buna prima.
+
+    Pe o strada cu doua sensuri iese cate o varianta pentru fiecare sens; pe una cu sens unic, doar sensul legal.
+    """
+    ay, ax = _SEG[:, 1], _SEG[:, 2] * _COS
+    by, bx = _SEG[:, 3], _SEG[:, 4] * _COS
+    py, px = lat, lng * _COS
+    sy, sx = by - ay, bx - ax
+    l2 = sx**2 + sy**2
+    t = np.clip(np.where(l2 > 0, ((px - ax) * sx + (py - ay) * sy) / np.where(l2 > 0, l2, 1), 0), 0, 1)
+    d = np.hypot(ax + t * sx - px, ay + t * sy - py) * 111_320
+    best = float(d.min())
+    out, seen = [], set()
+    for i in np.argsort(d)[:12]:
+        if d[i] > best + 2:
+            break
+        e = int(_SEG[i, 0])
+        if e in seen:
+            continue
+        seen.add(e)
+        u, v, _, cum, _ = _EDGES[e]
+        off = float(_SEG[i, 5] + t[i] * (_SEG[i, 6] - _SEG[i, 5]))
+        proj = [float(ay[i] + t[i] * sy[i]), float((ax[i] + t[i] * sx[i]) / _COS)]
+        # de ce parte a sensului de mers e punctul (pozitiv = stanga)
+        partea = float(sx[i] * (py - ay[i]) - sy[i] * (px - ax[i]))
+        out.append((float(d[i]), {"e": e, "u": u, "v": v, "off": off, "len": cum[-1],
+                                  "proj": proj, "dreapta": partea <= 0}))
+    return out
+
+
+def _snap(lat, lng):
+    """Locul de pe strada unde opreste camionul pentru punctul dat, si cat de departe e punctul de strada.
+
+    Pe strazile cu doua sensuri alegem sensul care lasa punctul pe dreapta, ca echipajul sa nu
+    traverseze strada cu pubela; pe strazile cu sens unic exista doar sensul legal.
+    """
+    variante = _snap_all(lat, lng)
+    off, stop = next(((d, s) for d, s in variante if s["dreapta"]), variante[0])
+    return stop, off
+
+
+@lru_cache(maxsize=1024)
+def _from(src):
+    """Distantele si drumurile de la un nod spre toate celelalte (harta nu se schimba, deci se pot refolosi)."""
+    return nx.single_source_dijkstra(_G, src, weight="length")
+
+
+def _same_edge_ahead(a, b):
+    return a["e"] is not None and a["e"] == b["e"] and b["off"] >= a["off"]
+
+
+def _leg(a, b):
+    """Metrii de mers legal de la oprirea a la oprirea b: restul strazii lui a, drumul pe harta, inceputul strazii lui b."""
+    if _same_edge_ahead(a, b) or a is b:
+        return max(0.0, b["off"] - a["off"])
+    mid = _from(a["v"])[0].get(b["u"])
+    if mid is None:
+        return _FARA_DRUM
+    return (a["len"] - a["off"]) + mid + b["off"]
+
+
+def _matrix(stops):
+    return np.array([[0 if i == j else round(_leg(a, b)) for j, b in enumerate(stops)]
+                     for i, a in enumerate(stops)], dtype=int)
+
+
+def _sub(stop, d0, d1):
+    """Punctele strazii opririi intre distantele d0 si d1 (masurate de la inceputul strazii)."""
+    if stop["e"] is None:
+        return [stop["proj"]]
+    _, _, pts, cum, _ = _EDGES[stop["e"]]
+
+    def at(d):
+        for j in range(len(pts) - 1):
+            if cum[j + 1] >= d:
+                f = (d - cum[j]) / (cum[j + 1] - cum[j]) if cum[j + 1] > cum[j] else 0
+                return [pts[j][0] + f * (pts[j + 1][0] - pts[j][0]), pts[j][1] + f * (pts[j + 1][1] - pts[j][1])]
+        return pts[-1]
+    out = []
+    for p in [at(d0)] + [p for p, c in zip(pts, cum) if d0 < c < d1] + [at(d1)]:
+        if not out or _m(out[-1], p) > 0.5:      # fara puncte dublate (strica directia de mers)
+            out.append(p)
+    return out
+
+
+def _leg_parts(a, b):
+    """Drumul de la a la b ca bucati [(puncte, nume strada)], fiecare strada cu forma ei reala."""
+    if _same_edge_ahead(a, b) or a is b:
+        return [(_sub(a, a["off"], b["off"]), _EDGES[a["e"]][4] if a["e"] is not None else "strada fără nume")]
+    path = _from(a["v"])[1].get(b["u"])
+    if path is None:
+        return []
+    parts = []
+    if a["e"] is not None:
+        parts.append((_sub(a, a["off"], a["len"]), _EDGES[a["e"]][4]))
+    for u, v in zip(path, path[1:]):
+        pts, _, name = _edge_geom(u, v)
+        parts.append((pts, name))
+    if b["e"] is not None:
+        parts.append((_sub(b, 0, b["off"]), _EDGES[b["e"]][4]))
+    return parts
+
+
+def _geometry(stops):
+    """Coordonatele [lat, lng] ale strazilor parcurse intre opriri, pentru desenat pe harta."""
+    coords = []
+    for a, b in zip(stops, stops[1:]):
+        for pts, _ in _leg_parts(a, b):
+            if coords and pts and coords[-1] == pts[0]:
+                pts = pts[1:]
+            coords.extend(pts)
+    return coords
+
+
+# ---------- navigatie pas cu pas, pentru aplicatia soferului ----------
+
+def _bearing(a, b):
+    """Directia de mers de la a la b, in grade (0 = nord, 90 = est)."""
+    la1, la2 = np.radians(a[0]), np.radians(b[0])
+    dl = np.radians(b[1] - a[1])
+    x = np.sin(dl) * np.cos(la2)
+    y = np.cos(la1) * np.sin(la2) - np.sin(la1) * np.cos(la2) * np.cos(dl)
+    return float(np.degrees(np.arctan2(x, y)) % 360)
 
 
 _VIRAJ = {"inainte": "Continuă înainte", "usor-dreapta": "Virează ușor la dreapta",
@@ -144,16 +227,18 @@ def etapa_navigatie(start, dest, nume_dest):
     usor-*, inainte, intoarcere, sosire), "text", "strada", "la_m" (unde incepe, in metri de la
     inceputul etapei), "lat"/"lng" (punctul manevrei) si "distanta_m" (cat tine pana la urmatorul pas).
     """
-    a, _ = _snap(*start)
     b, _ = _snap(*dest)
-    path = _from(a)[1].get(b) if a != b else [a]
-    if path is None:
+    # nu stim incotro e intors camionul: dintre sensurile strazii pe care e, il alegem pe cel mai scurt
+    a = min((s for _, s in _snap_all(*start)), key=lambda s: _leg(s, b))
+    parts = _leg_parts(a, b)
+    if not parts:
         raise ValueError("nu exista drum pe harta intre cele doua puncte")
 
     # bucati de drum grupate pe strazi: fiecare schimbare de strada e o manevra
     grupuri = []                                  # [nume, [puncte]]
-    for u, v in zip(path, path[1:]):
-        pts, name = _edge_points(u, v)
+    for pts, name in parts:
+        if len(pts) < 2:                          # bucata de lungime zero
+            continue
         if grupuri and grupuri[-1][0] == name:
             grupuri[-1][1].extend(pts[1:])
         else:
@@ -181,7 +266,8 @@ def etapa_navigatie(start, dest, nume_dest):
         pasi.append({"tip": tip, "text": text, "strada": name, "la_m": round(la),
                      "lat": pts[0][0], "lng": pts[0][1]})
         coords.extend(pts)
-    coords.append(list(dest))
+    if not grupuri:                               # deja la oprire
+        coords.append(b["proj"])
     total = sum(_m(p, q) for p, q in zip(coords, coords[1:]))
     pasi.append({"tip": "sosire", "text": f"Ai ajuns la {nume_dest}", "strada": nume_dest,
                  "la_m": round(total), "lat": dest[0], "lng": dest[1]})
@@ -193,7 +279,7 @@ def etapa_navigatie(start, dest, nume_dest):
 
 
 def _draw(plan, stops):
-    return _geometry([plan["_nodes"][s] for s in stops], [plan["_points"].get(s) for s in stops])
+    return _geometry([plan["_stops"][s] for s in stops])
 
 
 # ---------- validare ----------
@@ -215,19 +301,22 @@ def _clean_bins(bins, warnings):
         if not 0 <= fill <= 100:
             warnings.append(f"{bid}: umplere {fill} in afara 0-100; limitata")
             fill = min(max(fill, 0), 100)
-        node, off = _snap(lat, lng)
+        stop, off = _snap(lat, lng)
         if off > MAX_SNAP_M:
             warnings.append(f"{bid} e la {off:.0f} m de cea mai apropiata strada din harta; ignorata")
             continue
         seen.add(bid)
-        clean.append({**b, "umplere": fill, "_node": node})
+        clean.append({**b, "umplere": fill, "_stop": stop})
     return clean
 
 
 # ---------- solver ----------
 
-def _solve(M, demands, penalties, capacity, seconds):
-    """VRP cu capacitate. penalties = {index: penalitate}; fiecare pubela poate fi sarita contra penalitatii ei."""
+def _solve(M, demands, penalties, capacity, seconds, greedy=False):
+    """VRP cu capacitate. penalties = {index: penalitate}; fiecare pubela poate fi sarita contra penalitatii ei.
+
+    greedy=True: fara optimizare, doar "mergi la cea mai apropiata pubela" (cum ar face un sofer fara aplicatie).
+    """
     manager = pywrapcp.RoutingIndexManager(len(M), NUM_TRUCKS, 0)
     routing = pywrapcp.RoutingModel(manager)
     transit = routing.RegisterTransitCallback(
@@ -242,7 +331,10 @@ def _solve(M, demands, penalties, capacity, seconds):
 
     params = pywrapcp.DefaultRoutingSearchParameters()
     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    if greedy:
+        params.solution_limit = 1          # prima solutie gasita, fara nicio imbunatatire
+    else:
+        params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     params.time_limit.FromMilliseconds(int(seconds * 1000))
     solution = routing.SolveWithParameters(params)
     if solution is None:
@@ -265,13 +357,13 @@ def _solve(M, demands, penalties, capacity, seconds):
     return routes, total, visited
 
 
-def _empty_plan(depot_node, warnings):
+def _empty_plan(depot, warnings):
     routes = [{"truck": v, "stops": ["depot", "depot"], "distance_m": 0, "load_l": 0,
                "geometry": []} for v in range(NUM_TRUCKS)]
     return {"total_distance_m": 0, "routes": routes, "skipped": [], "predictions": {},
             "metrics": {"total_km": 0, "trucks_used": 0, "bins_total": 0, "bins_collected": 0,
                         "bins_skipped": 0, "overflows_prevented": 0},
-            "alerts": [], "warnings": warnings, "_nodes": {"depot": depot_node}, "_points": {}}
+            "alerts": [], "warnings": warnings, "_stops": {"depot": depot}}
 
 
 # ---------- API public ----------
@@ -279,16 +371,15 @@ def _empty_plan(depot_node, warnings):
 def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECONDS):
     history = history or {}
     warnings = []
-    depot_node, _ = _snap(DEPOT["lat"], DEPOT["lng"])
+    depot, _ = _snap(DEPOT["lat"], DEPOT["lng"])
     used = _clean_bins(bins, warnings)
     if not used:
         warnings.append("Nicio pubela utilizabila: toate camioanele raman in depozit")
-        return _empty_plan(depot_node, warnings)
+        return _empty_plan(depot, warnings)
 
     ids = ["depot"] + [b["id"] for b in used]
-    graph_nodes = [depot_node] + [b["_node"] for b in used]
-    points = {b["id"]: (float(b["lat"]), float(b["lng"])) for b in used}
-    M = _matrix(graph_nodes)
+    stops = [depot] + [b["_stop"] for b in used]
+    M = _matrix(stops)
     fills = [b["umplere"] / 100 for b in used]
     demands = [0] + [round(f * b.get("capacitate_l", DEFAULT_BIN_CAPACITY_L))
                      for f, b in zip(fills, used)]
@@ -314,8 +405,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     routes, total, visited = _solve(M, demands, penalties, capacity, seconds)
     for r in routes:
         r["stops"] = [ids[i] for i in r["stops"]]
-        r["geometry"] = _geometry([graph_nodes[ids.index(s)] for s in r["stops"]],
-                                  [points.get(s) for s in r["stops"]])
+        r["geometry"] = _geometry([stops[ids.index(s)] for s in r["stops"]])
 
     unserved = [ids[i] for i in mandatory if i not in visited]
     if unserved:
@@ -331,12 +421,12 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         "mandatory_unserved": len(unserved),
     }
     if compare_baseline:
-        # referinta = colectarea tuturor pubelelor; o calculam o data pentru acelasi set de pubele,
-        # ca procentul de economie sa nu sara de la o planificare la alta din cauza solver-ului
+        # referinta = colectarea tuturor pubelelor fara optimizare (din aproape in aproape, cum ar
+        # face un sofer fara aplicatie); o calculam o data pentru acelasi set de pubele
         key = tuple(ids)
         if key not in _baseline_cache:
             base = _solve(M, demands, {i: MANDATORY_PENALTY for i in range(1, len(ids))},
-                          TRUCK_CAPACITY_L, max(seconds, BASELINE_SECONDS))
+                          TRUCK_CAPACITY_L, BASELINE_SECONDS, greedy=True)
             _baseline_cache[key] = base[1]
         metrics["baseline_km"] = round(_baseline_cache[key] / 1000, 2)
         metrics["saving_pct"] = round(100 * (1 - total / _baseline_cache[key]), 1)
@@ -349,8 +439,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         "metrics": metrics,
         "alerts": [],
         "warnings": warnings,
-        "_nodes": dict(zip(ids, graph_nodes)),   # intern: id -> nod din graf, pentru alerte
-        "_points": points,                       # intern: id -> pozitia reala, pentru desen
+        "_stops": dict(zip(ids, stops)),         # intern: id -> locul de pe strada, pentru alerte si desen
     }
 
 
@@ -359,8 +448,8 @@ def insertion_cost(plan, lat, lng, volume_l=0):
     x, off = _snap(lat, lng)
     if off > MAX_SNAP_M:
         return None
-    nodes, to_x, from_x = plan["_nodes"], _to(x), _from(x)[0]
-    costs = [to_x[nodes[s[k]]] + from_x[nodes[s[k + 1]]] - _dist(nodes[s[k]], nodes[s[k + 1]])
+    st = plan["_stops"]
+    costs = [_leg(st[s[k]], x) + _leg(x, st[s[k + 1]]) - _leg(st[s[k]], st[s[k + 1]])
              for r in plan["routes"] if r["load_l"] + volume_l <= TRUCK_CAPACITY_L
              for s in [r["stops"]] for k in range(len(s) - 1)]
     return int(min(costs)) if costs else None
@@ -384,16 +473,15 @@ def add_alert(plan, alert, kind="alert"):
     if off > MAX_SNAP_M:
         return {"id": alert["id"], "status": "rejected", "reason": f"la {off:.0f} m de harta"}
 
-    nodes = plan["_nodes"]
-    to_x, from_x = _to(x), _from(x)[0]
+    st = plan["_stops"]
     best = None
     for r in plan["routes"]:
         if r["load_l"] + volume > TRUCK_CAPACITY_L:
             continue
         s = r["stops"]
         for k in range(len(s) - 1):
-            a, b = nodes[s[k]], nodes[s[k + 1]]
-            extra = to_x[a] + from_x[b] - _dist(a, b)
+            a, b = st[s[k]], st[s[k + 1]]
+            extra = _leg(a, x) + _leg(x, b) - _leg(a, b)
             if best is None or extra < best[0]:
                 best = (extra, r, k + 1)
 
@@ -407,8 +495,7 @@ def add_alert(plan, alert, kind="alert"):
 
     extra, route, pos = best
     dedicated = len(route["stops"]) == 2
-    nodes[alert["id"]] = x
-    plan.setdefault("_points", {})[alert["id"]] = (float(alert["lat"]), float(alert["lng"]))
+    st[alert["id"]] = x
     route["stops"].insert(pos, alert["id"])
     route["geometry"] = _draw(plan, route["stops"])
     route["distance_m"] += int(extra)

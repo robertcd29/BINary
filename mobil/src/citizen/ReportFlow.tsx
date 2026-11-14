@@ -1,7 +1,7 @@
 // Raportarea unei depozitari ilegale: o poza + locatia. Serverul verifica poza (Gemini)
 // si, daca e o depozitare reala, o pune direct pe ruta unui camion.
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Check, CircleAlert, MapPin, RotateCcw, ShieldCheck } from 'lucide-react'
+import { Camera, Check, CircleAlert, MapPin, RotateCcw, ShieldCheck, X } from 'lucide-react'
 import { CircleMarker, MapContainer, TileLayer, useMap } from 'react-leaflet'
 
 import { submitReport, type Coordinates, type ReportResult } from '../api'
@@ -95,6 +95,7 @@ export default function ReportFlow({ geo, onDone }: { geo: GeoState; onDone: () 
       {preview ? (
         <div className="photo">
           <img src={preview} alt="Poza pentru raport" />
+          <button className="photo-remove" onClick={reset} aria-label="Șterge poza" title="Șterge poza"><X size={20} /></button>
           <button className="photo-retake" onClick={() => input.current?.click()}><RotateCcw size={16} /> Refă poza</button>
         </div>
       ) : (

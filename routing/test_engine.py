@@ -25,7 +25,7 @@ print("Metrici:", plan["metrics"])
 
 print(routing_engine.add_alert(plan, {"id": "AL-1", "lat": 45.7475, "lng": 21.2395, "volum_l": 500}))
 
-plan.pop("_nodes")
+plan.pop("_stops")
 with open("example_output.json", "w") as f:
     json.dump(plan, f, indent=2)
 print("Exemplu de raspuns salvat in example_output.json")

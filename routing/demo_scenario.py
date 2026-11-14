@@ -23,7 +23,7 @@ bins = [{"id": b["id"], "lat": b["lat"], "lng": b["lon"],
 
 
 def save(step, plan):
-    out = {k: v for k, v in plan.items() if k != "_nodes"}
+    out = {k: v for k, v in plan.items() if not k.startswith("_")}
     with open(f"demo_step{step}.json", "w") as f:
         json.dump(out, f, indent=2)
 
