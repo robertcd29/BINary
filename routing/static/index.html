@@ -773,7 +773,9 @@
 
         const fmt = (n, d = 0) => Number(n).toLocaleString("ro-RO", { maximumFractionDigits: d, minimumFractionDigits: d });
         const culoareUmplere = p => p >= 85 ? "var(--full)" : p >= 60 ? "var(--warn)" : "var(--ok)";
-        const numeCamion = t => `Camion ${t + 1}`;
+        let NUMERE = [];                        // numerele de inmatriculare, de la /api/camioane
+        fetch("/api/camioane").then(r => r.json()).then(c => { NUMERE = c.map(x => x.nr); try { deseneazaTot(); } catch { /* datele vin la urmatoarea actualizare */ } }).catch(() => {});
+        const numeCamion = t => NUMERE[t] || `Camion ${t + 1}`;
 
         function timpTrecut(iso) {
             const s = Math.round((Date.now() - new Date(iso)) / 1000);

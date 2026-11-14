@@ -3,9 +3,10 @@
 import { createAuth0Client, type Auth0Client } from '@auth0/auth0-spa-js'
 
 const ROLURI = 'https://binary-api/roles'   // campul pus in token de Action-ul "Roluri in token"
+const CAMION = 'https://binary-api/camion'  // camionul soferului, din app_metadata
 let client: Auth0Client | null = null
 
-export type Sesiune = { activ: boolean; logat: boolean; vizitator?: boolean; email?: string; roluri: string[]; eroare?: string }
+export type Sesiune = { activ: boolean; logat: boolean; vizitator?: boolean; email?: string; roluri: string[]; camion?: number; eroare?: string }
 
 // vizitator = cetatean fara cont: poate raporta, dar nu are acces la partea de sofer
 const CHEIE_VIZITATOR = 'binary-vizitator'
@@ -33,7 +34,9 @@ export async function pornesteAuth(): Promise<Sesiune> {
     return { activ: true, logat: false, roluri: [] }
   }
   const date = await client.getIdTokenClaims()
-  return { activ: true, logat: true, email: (date?.email || date?.name) as string, roluri: (date?.[ROLURI] as string[]) || [] }
+  const camion = date?.[CAMION]
+  return { activ: true, logat: true, email: (date?.email || date?.name) as string, roluri: (date?.[ROLURI] as string[]) || [],
+    camion: camion === undefined || camion === null ? undefined : Number(camion) }
 }
 
 export const intra = () => { uitaVizitator(); client?.loginWithRedirect() }

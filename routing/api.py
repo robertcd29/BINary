@@ -35,7 +35,7 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 import dumping
-from auth import cere_rol
+from auth import CAMION, ROLURI, cere_rol
 import routing_engine as engine
 import sensor_filter as sf
 from explain import explain_plan
@@ -65,6 +65,8 @@ ZONE = {   # unghiul se masoara de la nord, in sensul acelor de ceasornic
 }
 SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
 CAMIOANE_ZONA = {z: [z, z + len(ZONE)] for z in ZONE}   # 6 camioane: 1-3 principale, 4-6 rezerva
+# soferii isi recunosc camionul dupa numarul de inmatriculare (numere inventate, pentru prototip)
+NUMERE_CAMIOANE = ["TM 01 BIN", "TM 02 BIN", "TM 03 BIN", "TM 04 BIN", "TM 05 BIN", "TM 06 BIN"]
 
 
 def zona_pentru(lat, lng):
@@ -445,6 +447,30 @@ def rute(explicatie: bool = False):
         return out
 
 
+@router.get("/camioane")
+def camioane():
+    return [{"camion": i, "nr": nr} for i, nr in enumerate(NUMERE_CAMIOANE)]
+
+
+def _camionul_meu(date):
+    """Camionul soferului logat (None = fara restrictie: login oprit sau dispecer)."""
+    if date is None or "admin" in date.get(ROLURI, []):
+        return None
+    if date.get(CAMION) is None:
+        raise HTTPException(403, "Contul tău nu are un camion atribuit. Cere-i dispecerului.")
+    return int(date[CAMION])
+
+
+def _verifica_oprire(date, sid):
+    """Un sofer poate bifa doar opririle de pe ruta camionului lui."""
+    c = _camionul_meu(date)
+    if c is None or _state["plan"] is None:
+        return
+    r = next((x for x in _state["plan"]["routes"] if x["truck"] == c), None)
+    if r is None or sid not in r["stops"]:
+        raise HTTPException(403, "Oprirea nu e pe ruta camionului tău")
+
+
 @router.get("/auth-config")
 def auth_config():
     """Ce le trebuie paginilor ca sa porneasca loginul Auth0 (nimic secret: domeniul si Client ID sunt publice)."""
@@ -479,10 +505,11 @@ def planifica():
         return _out(_build_plan(conn))
 
 
-@router.post("/pubele/{bin_id}/golita", dependencies=[Depends(cere_rol("sofer", "admin"))])
-def golita(bin_id: str):
+@router.post("/pubele/{bin_id}/golita")
+def golita(bin_id: str, date: dict | None = Depends(cere_rol("sofer", "admin"))):
     """Pentru pubelele simulate. Cele reale sunt detectate singure, din scaderea brusca a senzorului."""
     with _lock, _connect() as conn:
+        _verifica_oprire(date, bin_id)
         found = conn.execute("UPDATE rutare_pubele SET umplere = 0, actualizat = now() WHERE id = %s",
                              (bin_id,)).rowcount
         if not found:
@@ -541,9 +568,10 @@ def lista_alerte():
         return conn.execute("SELECT * FROM rutare_alerte ORDER BY creata DESC").fetchall()
 
 
-@router.post("/alerte/{alert_id}/colectata", dependencies=[Depends(cere_rol("sofer", "admin"))])
-def alerta_colectata(alert_id: str):
+@router.post("/alerte/{alert_id}/colectata")
+def alerta_colectata(alert_id: str, date: dict | None = Depends(cere_rol("sofer", "admin"))):
     with _lock, _connect() as conn:
+        _verifica_oprire(date, alert_id)
         found = conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
                                 WHERE id = %s AND status <> 'colectata'""", (alert_id,)).rowcount
         if not found:
@@ -717,9 +745,12 @@ class Pozitie(BaseModel):
     lng: float
 
 
-@router.post("/pozitie", dependencies=[Depends(cere_rol("sofer", "admin"))])
-def pozitie(p: Pozitie):
+@router.post("/pozitie")
+def pozitie(p: Pozitie, date: dict | None = Depends(cere_rol("sofer", "admin"))):
     """Aplicatia soferului o trimite periodic; dashboard-ul o citeste din GET /pozitii."""
+    c = _camionul_meu(date)
+    if c is not None and p.camion != c:
+        raise HTTPException(403, "Poți trimite doar poziția camionului tău")
     _state["pozitii"][p.camion] = {"camion": p.camion, "lat": p.lat, "lng": p.lng,
                                    "la": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     return {"status": "ok"}
@@ -754,6 +785,6 @@ def compat_rapoarte(poza: UploadFile = File(...), lat: float = Form(...), lng: f
     return {"id": r["alerta"]["id"], "status": "Acceptată", "descriere": r["descriere"]}
 
 
-@compat.post("/pozitie", dependencies=[Depends(cere_rol("sofer", "admin"))])
-def compat_pozitie(p: Pozitie):
-    return pozitie(p)
+@compat.post("/pozitie")
+def compat_pozitie(p: Pozitie, date: dict | None = Depends(cere_rol("sofer", "admin"))):
+    return pozitie(p, date)

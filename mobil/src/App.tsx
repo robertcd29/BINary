@@ -80,6 +80,12 @@ export default function App() {
   const [role, setRole] = useState<Role>('citizen')
   const [truckId, setTruckId] = useState('0')
   const [sesiune, setSesiune] = useState<Sesiune | null>(null)
+  const [numere, setNumere] = useState<string[]>([])
+  const numar = (i: number) => numere[i] || `Camion ${i + 1}`
+
+  useEffect(() => {
+    fetch('/api/camioane').then(r => r.json()).then((c: { nr: string }[]) => setNumere(c.map(x => x.nr))).catch(() => {})
+  }, [])
 
   useEffect(() => {
     pornesteAuth().then(setSesiune).catch(e => setSesiune({ activ: true, logat: false, roluri: [], eroare: `Loginul nu a mers (${e.message}).` }))
@@ -94,6 +100,10 @@ export default function App() {
     return <div className="app"><div className="login"><p>Te ducem la dispecerat…</p></div></div>
   }
   const doarSofer = sesiune.activ && sesiune.roluri.includes('sofer')
+  // soferul logat primeste direct camionul lui (din contul Auth0), fara sa aleaga
+  const camionFix = doarSofer ? sesiune.camion : undefined
+  const camionAles = camionFix !== undefined ? String(camionFix) : truckId
+  const fara_camion = doarSofer && camionFix === undefined
   const doarCetatean = sesiune.activ && !doarSofer
   const rolAfisat: Role = doarSofer ? 'driver' : doarCetatean ? 'citizen' : role
 
@@ -104,10 +114,13 @@ export default function App() {
           <span className="brand-mark"><BrandMark /></span>
           <span className="brand-name">BIN<b>ary</b></span>
         </div>
-        {rolAfisat === 'driver' && (
+        {rolAfisat === 'driver' && camionFix !== undefined && (
+          <span className="truck-plate" style={{ borderColor: TRUCK_COLORS[camionFix] }}>{numar(camionFix)}</span>
+        )}
+        {rolAfisat === 'driver' && !sesiune.activ && (   // fara login: alegerea manuala, ca pentru teste
           <select className="truck-select" value={truckId} onChange={e => setTruckId(e.target.value)} aria-label="Camionul tău"
             style={{ borderColor: TRUCK_COLORS[Number(truckId)] }}>
-            {TRUCK_COLORS.map((_, i) => <option key={i} value={i}>Camion {i + 1}</option>)}
+            {TRUCK_COLORS.map((_, i) => <option key={i} value={i}>{numar(i)}</option>)}
           </select>
         )}
         {!sesiune.activ && (   // fara login (comutatorul oprit) se poate trece intre moduri, ca inainte
@@ -125,7 +138,14 @@ export default function App() {
       </header>
 
       <main className="content">
-        {rolAfisat === 'citizen' ? <Citizen /> : <Driver key={truckId} truckId={truckId} />}
+        {rolAfisat === 'citizen' ? <Citizen />
+          : fara_camion ? (
+            <div className="login">
+              <h1>Niciun camion atribuit</h1>
+              <p>Contul {sesiune.email} nu are încă un camion. Cere-i dispecerului să ți-l atribuie, apoi intră din nou.</p>
+              <button className="btn-primary login-btn" onClick={() => iesi()}>Ieși din cont</button>
+            </div>
+          ) : <Driver key={camionAles} truckId={camionAles} />}
       </main>
     </div>
   )

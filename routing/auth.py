@@ -15,6 +15,7 @@ import jwt
 from fastapi import Header, HTTPException
 
 ROLURI = "https://binary-api/roles"      # numele campului pus de Action in token
+CAMION = "https://binary-api/camion"     # camionul soferului (din app_metadata, pus tot de Action)
 
 
 def _cfg():
