@@ -25,7 +25,7 @@ DEPOT = {"lat": 45.7547817, "lng": 21.2506284}   # punctul de plecare al camioan
 NUM_TRUCKS = 3
 TRUCK_CAPACITY_L = 8000
 RESERVE = 0.10
-MANDATORY_FILL = 0.8
+MANDATORY_FILL = 0.85            # la fel ca rosul de pe harta (peste 85%)
 MIN_FILL = 0.3                   # sub acest prag pubela nu merita drumul (afara de risc de revarsare)
 HORIZON_H = 24
 PENALTY_SCALE = 4000             # ocolul acceptat (m) pentru o pubela optionala = PENALTY_SCALE * umplere^2

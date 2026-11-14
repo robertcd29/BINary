@@ -880,7 +880,8 @@
         // ---------- indicatori ----------
         function deseneazaKpi() {
             const { pubele, plan, alerte, pozitii } = stare;
-            const deGolit = pubele.filter(p => (p.umplere ?? 0) > 0);
+            const op = opririle(plan);
+            const deGolit = plan ? pubele.filter(p => op[p.id]) : pubele.filter(p => (p.umplere ?? 0) >= 85);
             const pline = pubele.filter(p => (p.umplere ?? 0) >= 85).length;
             setKpi("k-golit", fmt(deGolit.length), `din ${pubele.length} ghene · ${pline} peste 85%`);
             document.getElementById("k-golit").classList.toggle("alerta", pline > 0);
@@ -889,7 +890,7 @@
             if (m) {
                 const sub = el("span");
                 if (m.baseline_km) {
-                    sub.append(el("span", "delta", `−${fmt(m.saving_pct)}%`), `față de ${fmt(m.baseline_km, 1)} km fără optimizare`);
+                    sub.append(el("span", "delta", `−${fmt(m.saving_pct)}%`), `față de ${fmt(m.baseline_km, 1)} km golind toate ghenele`);
                 }
                 setKpi("k-km", fmt(m.total_km, 1), sub, "km");
                 const kmEconomisiti = Math.max(0, (m.baseline_km ?? m.total_km) - m.total_km);
@@ -950,9 +951,10 @@
             const op = opririle(stare.plan);
             const pred = stare.plan?.predictions || {};
             let pubele = [...stare.pubele].sort((a, b) => (b.umplere ?? 0) - (a.umplere ?? 0));
-            if (filtruGhene === "degolit") pubele = pubele.filter(p => (p.umplere ?? 0) > 0);
+            const deGolit = p => stare.plan ? !!op[p.id] : (p.umplere ?? 0) >= 85;
+            if (filtruGhene === "degolit") pubele = pubele.filter(deGolit);
             if (filtruGhene === "pline") pubele = pubele.filter(p => (p.umplere ?? 0) >= 85);
-            $("#c-ghene").textContent = stare.pubele.filter(p => (p.umplere ?? 0) > 0).length;
+            $("#c-ghene").textContent = stare.pubele.filter(deGolit).length;
             if (!pubele.length) {
                 lista.append(el("li", "gol", filtruGhene === "toate" ? "Nicio ghenă în baza de date." : "Nicio ghenă în această categorie. Bine!"));
                 return;
@@ -979,8 +981,10 @@
                     const t = el("span", "tag route", `${numeCamion(o.truck)} · oprirea ${o.i}/${o.n}`);
                     t.style.setProperty("--c", CULORI[o.truck % CULORI.length]);
                     tags.append(t);
-                } else if (u > 0 && p.pe_ruta_posibil !== false) {
-                    tags.append(el("span", "tag warn", "Neplanificată încă"));
+                } else if (u >= 85 && p.pe_ruta_posibil !== false) {
+                    tags.append(el("span", "tag warn", "Neplanificată încă"));   // plina, dar nu e pe nicio ruta
+                } else if (u > 0 && stare.plan && p.pe_ruta_posibil !== false) {
+                    tags.append(el("span", "tag muted", u >= 30 ? "Amânată: ocol prea mare" : "Amânată: aproape goală"));
                 }
                 if (u >= 85) tags.append(el("span", "tag full", "Aproape plină"));
                 const h = pred[p.id]?.hours_to_full;
