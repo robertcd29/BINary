@@ -6,7 +6,7 @@ import { MapContainer, Marker, Polyline, Popup, useMap } from 'react-leaflet'
 import BaseMap from '../BaseMap'
 
 import {
-  getDriverRoute, markAlertCollected, markStopEmptied, sendDriverPosition,
+  getDriverRoute, isTransient, markAlertCollected, markStopEmptied, sendDriverPosition,
   type DriverRoute, type NavStop, type RouteStop
 } from '../api'
 import { fillColor, formatDistance, TIMISOARA, useGeolocation } from '../lib'
@@ -54,7 +54,11 @@ export function useDriver(truckId: string) {
 
   const loadRoute = useCallback(() => getDriverRoute(truckId)
     .then(r => { setRoute(r); setError('') })
-    .catch(e => { setRoute(null); setError(e instanceof Error ? e.message : 'Nu am putut încărca ruta.') }), [truckId])
+    .catch(e => {
+      // o cadere scurta a serverului nu sterge ruta de pe ecran: reincercam la urmatoarea verificare
+      if (isTransient(e)) return
+      setRoute(null); setError(e instanceof Error ? e.message : 'Nu am putut încărca ruta.')
+    }), [truckId])
 
   useEffect(() => { loadRoute() }, [loadRoute])
 

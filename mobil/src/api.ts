@@ -8,19 +8,44 @@ export type Coordinates = { lat: number; lng: number }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/$/, '')
 
+/** Eroare de la server; status 0 = n-a ajuns deloc la server (fara retea, tunel cazut). */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message) }
+}
+
+/** Probleme trecatoare (retea, server repornit, tunel Cloudflare 502/503/504): merita reincercat
+ *  si nu trebuie sa stearga ce vede soferul pe ecran. */
+export const isTransient = (e: unknown) => e instanceof ApiError && (e.status === 0 || e.status >= 500)
+
+const RETRY_DELAYS_MS = [700, 1800]
+
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   // cererile care schimba ceva (POST) merg cu tokenul de login; citirile raman publice
   const auth = init?.method && init.method !== 'GET' ? await antetAuth() : {}
-  const response = await fetch(`${API_BASE}${path}`, { ...init, headers: { ...(init?.headers || {}), ...auth } })
-  if (!response.ok) {
-    let detail = `Serverul a răspuns cu HTTP ${response.status}`
+  const isRead = !init?.method || init.method === 'GET'
+  for (let attempt = 0; ; attempt++) {
+    let response: Response
     try {
-      const body = await response.json()
-      if (body.detail) detail = body.detail
-    } catch { /* raspuns fara JSON */ }
-    throw new Error(detail)
+      response = await fetch(`${API_BASE}${path}`, { ...init, headers: { ...(init?.headers || {}), ...auth } })
+    } catch {
+      response = new Response(null, { status: 599 })
+    }
+    // citirile se reincearca singure la o cadere scurta a serverului; POST-urile nu (sa nu se dubleze)
+    if (isRead && attempt < RETRY_DELAYS_MS.length && [502, 503, 504, 599].includes(response.status)) {
+      await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]))
+      continue
+    }
+    if (response.status === 599) throw new ApiError('Nu am legătură cu serverul. Verifică internetul.', 0)
+    if (!response.ok) {
+      let detail = `Serverul a răspuns cu HTTP ${response.status}`
+      try {
+        const body = await response.json()
+        if (body.detail) detail = body.detail
+      } catch { /* raspuns fara JSON */ }
+      throw new ApiError(detail, response.status)
+    }
+    return response.json() as Promise<T>
   }
-  return response.json() as Promise<T>
 }
 
 export const photoUrl = (alertId: string) => `${API_BASE}/captures/${encodeURIComponent(alertId)}.jpg`

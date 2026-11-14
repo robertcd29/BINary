@@ -15,7 +15,7 @@ const VIEW_LABEL: Record<ViewMode, string> = {
 }
 
 import {
-  getNavigation, sendDriverPosition,
+  getNavigation, isTransient, sendDriverPosition,
   type Coordinates, type LaneDir, type Navigation, type NavStep, type NavStop
 } from './api'
 
@@ -144,12 +144,16 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   positionRef.current = position
   const lastReroute = useRef(0)
 
+  const hasNav = useRef(false)
   const refresh = useCallback(async (from?: Coordinates | null) => {
     setLoading(true)
     try {
       setNav(await getNavigation(truckId, from ?? positionRef.current))
+      hasNav.current = true
       setError('')
     } catch (e) {
+      // serverul a cazut cateva secunde (ex. 502 de la tunel): soferul ramane pe navigatia pe care o are
+      if (hasNav.current && isTransient(e)) return
       setError(e instanceof Error ? e.message : 'Nu s-a putut calcula navigația.')
     } finally {
       setLoading(false)
@@ -158,6 +162,7 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
 
   useEffect(() => {
     if (!enabled) return
+    hasNav.current = false
     setNav(null)
     setSimulating(false)
     refresh(null)
