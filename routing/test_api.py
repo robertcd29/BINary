@@ -22,11 +22,13 @@ def client():
                      "rutare_golire, rutare_alerte")
         # exact tabela si datele din server.py-ul lui Robert
         conn.execute("CREATE TABLE trashes (id TEXT PRIMARY KEY, lat DOUBLE PRECISION, "
-                     "lng DOUBLE PRECISION, umplere INTEGER, actualizat TIMESTAMPTZ DEFAULT now())")
+                     "lng DOUBLE PRECISION, umplere INTEGER, actualizat TIMESTAMPTZ DEFAULT now(), "
+                     "nume TEXT, adresa TEXT, tip TEXT)")   # nume/adresa/tip: adaugate mai tarziu de backend
         conn.execute("INSERT INTO trashes (id, lat, lng, umplere) VALUES "
                      "('TM-001', 45.7489, 21.2087, 73), ('TM-002', 45.7537, 21.2257, 41)")
         # TM-003 nu a mai trimis nimic de 2 ore
-        conn.execute("INSERT INTO trashes VALUES ('TM-003', 45.7601, 21.2290, 90, now() - interval '2 hours')")
+        conn.execute("INSERT INTO trashes (id, lat, lng, umplere, actualizat) "
+                     "VALUES ('TM-003', 45.7601, 21.2290, 90, now() - interval '2 hours')")
     os.environ["DATABASE_URL"] = TEST_DB
     from fastapi.testclient import TestClient
     import main
@@ -90,7 +92,7 @@ def test_pubela_urgenta_intra_o_singura_data_in_ruta(client):
 
 def test_alerta_de_la_camera_deduplicata(client):
     first = client.post("/api/alerte", json={"lat": CAMERA[0], "lng": CAMERA[1], "sursa": "camera"}).json()
-    assert first["status"] == "assigned" and first["sursa"] == "camera"
+    assert first["status"] == "assigned" and first["sursa"] == "camera", first
     for _ in range(3):                            # modelul detecteaza din nou la fiecare poza
         again = client.post("/api/alerte", json={"lat": CAMERA[0], "lng": CAMERA[1], "sursa": "camera"}).json()
         assert again["status"] == "duplicat" and again["id"] == first["id"]
@@ -108,3 +110,15 @@ def test_replanificare_si_colectare(client):
     assert client.post("/api/pubele/bin_005/golita").json()["status"] == "ok"
     assert client.post("/api/pubele/TM-001/golita").status_code == 404
     assert trashes_snapshot()[1] == 3
+
+
+def test_reset_demo_sterge_alertele(client):
+    ids = {a["id"] for a in client.get("/api/alerte").json()}
+    assert ids, "testele de mai sus au creat alerte"
+    client.post("/api/demo/reset")
+    assert client.get("/api/alerte").json() == []          # punctele dispar de pe harta
+    plan = client.get("/api/rute").json()
+    assert not ids & {s for r in plan["routes"] for s in r["stops"]}
+    # alerta noua nu primeste id-ul uneia sterse (poza veche din captures/ ar aparea la ea)
+    nou = client.post("/api/alerte", json={"lat": 45.7600, "lng": 21.2300}).json()
+    assert nou["id"] not in ids

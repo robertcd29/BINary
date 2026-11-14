@@ -179,6 +179,14 @@ def init_db():
             nr_raportari INTEGER DEFAULT 1, status TEXT DEFAULT 'deschisa', camion INTEGER,
             creata TIMESTAMPTZ DEFAULT now(), inchisa TIMESTAMPTZ)""")
         conn.execute("ALTER TABLE rutare_alerte ADD COLUMN IF NOT EXISTS descriere TEXT")
+        conn.execute("CREATE SEQUENCE IF NOT EXISTS rutare_alerte_nr")
+        # secventa porneste dupa cel mai mare id existent (alerte din baza sau poze din captures/)
+        n = conn.execute("""SELECT coalesce(max(substring(id FROM 4)::int), 0) AS n
+                            FROM rutare_alerte WHERE id ~ '^AL-[0-9]+$'""").fetchone()["n"]
+        poze = [int(f.stem[3:]) for f in (HERE / "captures").glob("AL-*.jpg") if f.stem[3:].isdigit()]
+        n = max([n, *poze])
+        if n:
+            conn.execute("SELECT setval('rutare_alerte_nr', greatest(%s, (SELECT last_value FROM rutare_alerte_nr)))", (n,))
         with conn.cursor() as cur:
             cur.executemany(
                 """INSERT INTO rutare_pubele (id, lat, lng, umplere, capacitate_l)
@@ -447,6 +455,12 @@ def _assign(conn, alert):
     return r
 
 
+def _urmatorul_nr_alerta(conn):
+    """Numarul alertei noi, dintr-o secventa care nu se reseteaza: dupa Reset demo (care sterge
+    alertele) o alerta noua nu primeste id-ul uneia vechi (poza ei din captures/, starea din telefon)."""
+    return conn.execute("SELECT nextval('rutare_alerte_nr') AS n").fetchone()["n"]
+
+
 def _register_alert(conn, sursa, lat, lng, marime, camera_id=None):
     if marime not in engine.ALERT_SIZES_L:
         marime = "medie"
@@ -457,8 +471,7 @@ def _register_alert(conn, sursa, lat, lng, marime, camera_id=None):
         conn.execute("UPDATE rutare_alerte SET nr_raportari = nr_raportari + 1 WHERE id = %s", (dup["id"],))
         return {"id": dup["id"], "status": "duplicat",
                 "reason": f"exista deja o alerta deschisa la sub {dumping.MERGE_RADIUS_M} m"}
-    n = conn.execute("SELECT count(*) AS n FROM rutare_alerte").fetchone()["n"]
-    alert = {"id": f"AL-{n + 1:04d}", "lat": lat, "lng": lng, "volum_l": engine.ALERT_SIZES_L[marime]}
+    alert = {"id": f"AL-{_urmatorul_nr_alerta(conn):04d}", "lat": lat, "lng": lng, "volum_l": engine.ALERT_SIZES_L[marime]}
     conn.execute("""INSERT INTO rutare_alerte (id, sursa, camera_id, lat, lng, marime, volum_l)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)""",
                  (alert["id"], sursa, camera_id, lat, lng, marime, alert["volum_l"]))
@@ -534,8 +547,8 @@ def auth_config():
 def reset_demo():
     """Butonul de reset pentru demo: aduce orasul la starea de dimineata si replanifica.
 
-    Ghenele simulate revin la umplerea din sim_bins.json, depozitarile si raportarile de test se
-    inchid, iar opririle bifate, fluxul live si pozitiile GPS se sterg. Senzorii reali raman cum sunt.
+    Ghenele simulate revin la umplerea din sim_bins.json, depozitarile si raportarile se sterg
+    (si de pe harta), iar opririle bifate, fluxul live si pozitiile GPS se sterg. Senzorii reali raman cum sunt.
     """
     with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         with conn.cursor() as cur:
@@ -547,8 +560,7 @@ def reset_demo():
                 cur.executemany("UPDATE trashes SET umplere = %s, actualizat = now() WHERE id = %s",
                                 [(round(b["fill_level"] * 100), b["id"]) for b in SIM.values()])
         conn.execute("DELETE FROM rutare_golire WHERE bin_id = ANY(%s)", (list(SIM),))
-        conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
-                        WHERE status IN ('deschisa', 'asignata')""")
+        conn.execute("DELETE FROM rutare_alerte")   # punctele depozitarilor dispar de pe harta
         _state.update(plan=None, facute=set(), evenimente=[], pozitii={})
         return _out(_build_plan(conn))
 
