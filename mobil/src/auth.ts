@@ -47,11 +47,12 @@ export function iesi() {
 
 /** Antetul cu tokenul, pentru cererile care schimba ceva pe server (fara login pornit: nimic). */
 export async function antetAuth(): Promise<Record<string, string>> {
-  if (!client) return {}
+  // vizitatorul (fara cont) trimite cererile fara token: serverul accepta raportarile si asa
+  if (!client || esteVizitator() || !await client.isAuthenticated()) return {}
   try {
     return { Authorization: `Bearer ${await client.getTokenSilently()}` }
   } catch {
-    await client.loginWithRedirect()
+    await client.loginWithRedirect()     // sesiune expirata la un utilizator logat: login din nou
     return {}
   }
 }
