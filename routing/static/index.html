@@ -608,6 +608,7 @@
                 </div>
             </div>
             <div class="live" id="live" aria-live="polite"><span class="live-dot"></span><span id="status">Se conectează…</span></div>
+            <button class="btn" id="reset" title="Aduce orașul la starea de dimineață, pentru următorul vizitator">Reset demo</button>
             <button class="btn btn-primary" id="planifica">
                 <svg class="icon"><use href="#i-play"/></svg>Planifică rutele de azi
             </button>
@@ -1167,6 +1168,32 @@
                 stareHarta(`Rutele nu s-au putut calcula (${e.message}).`);
             } finally {
                 buton.disabled = false;
+            }
+        };
+
+        // reset pentru demo: primul click cere confirmare, al doilea (in 4 secunde) reseteaza
+        const reset = $("#reset");
+        let resetArmat = null;
+        reset.onclick = async () => {
+            if (!resetArmat) {
+                reset.textContent = "Sigur? Apasă din nou";
+                resetArmat = setTimeout(() => { resetArmat = null; reset.textContent = "Reset demo"; }, 4000);
+                return;
+            }
+            clearTimeout(resetArmat);
+            resetArmat = null;
+            reset.disabled = buton.disabled = true;
+            reset.textContent = "Se resetează…";
+            stareHarta("Orașul revine la starea de dimineață și se recalculează rutele…");
+            try {
+                await actualizeaza(await cere("POST", "/api/demo/reset"));
+                stareHarta("");
+                seteazaStatus(`Demo resetat la ${ora()}`);
+            } catch (e) {
+                stareHarta(`Resetul nu a reușit (${e.message}).`);
+            } finally {
+                reset.disabled = buton.disabled = false;
+                reset.textContent = "Reset demo";
             }
         };
 

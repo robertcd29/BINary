@@ -444,6 +444,25 @@ def rute(explicatie: bool = False):
         return out
 
 
+@router.post("/demo/reset")
+def reset_demo():
+    """Butonul de reset pentru demo: aduce orasul la starea de dimineata si replanifica.
+
+    Ghenele simulate revin la umplerea din sim_bins.json, depozitarile si raportarile de test se
+    inchid, iar opririle bifate, fluxul live si pozitiile GPS se sterg. Senzorii reali raman cum sunt.
+    """
+    with _lock, _connect() as conn:
+        with conn.cursor() as cur:
+            cur.executemany("""UPDATE rutare_pubele SET umplere = %s, actualizat = now(), golita_la = NULL
+                               WHERE id = %s""",
+                            [(round(b["fill_level"] * 100), b["id"]) for b in SIM.values()])
+        conn.execute("DELETE FROM rutare_golire WHERE bin_id = ANY(%s)", (list(SIM),))
+        conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
+                        WHERE status IN ('deschisa', 'asignata')""")
+        _state.update(plan=None, facute=set(), evenimente=[], pozitii={})
+        return _out(_build_plan(conn))
+
+
 @router.post("/rute/planifica")
 def planifica():
     """Planul de dimineata: recalculeaza tot din datele actuale."""
