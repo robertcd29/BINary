@@ -100,7 +100,7 @@ export function useDriver(truckId: string) {
   async function complete(stop: { id: string; tip: string }) {
     if (stop.tip === 'depozitare') await markAlertCollected(stop.id)
     else await markStopEmptied(stop.id)
-    await loadRoute()
+    loadRoute()     // lista opririlor se actualizeaza in fundal; navigatia trece imediat la urmatoarea
   }
 
   return { geo, navigation, route, error, complete, loadRoute }

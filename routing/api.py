@@ -19,6 +19,7 @@ import sys
 import json
 import math
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -297,9 +298,23 @@ def _poll(conn):
     return events
 
 
+def _nimic_nou(conn):
+    """Verificare rapida, fara lacat: nicio ghena din trashes nu are o citire noua de la ultima trecere."""
+    seen = _state["seen"]
+    if seen is None or not _has_trashes(conn):
+        return False
+    return all(r["actualizat"] is None or (r["id"] in seen and r["actualizat"] <= seen[r["id"]])
+               for r in _trashes(conn))
+
+
 def poll_once():
-    with _lock, _connect() as conn:
-        return _poll(conn)
+    # lacatul tine pe loc toate cererile care modifica sau citesc planul: il luam doar cand chiar
+    # e ceva nou de procesat, si cu conexiunea la baza de date deja deschisa
+    with _connect() as conn:
+        if _nimic_nou(conn):
+            return []
+        with _lock:
+            return _poll(conn)
 
 
 def watch(stop):
@@ -451,7 +466,7 @@ def _register_alert(conn, sursa, lat, lng, marime, camera_id=None):
 def precalculeaza():
     """Pornit de main.py la startup: planul e gata pana deschide cineva dashboard-ul."""
     try:
-        with _lock, _connect() as conn:
+        with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
             if _state["plan"] is None:
                 _build_plan(conn)
                 print("rutare: planul zilei e calculat")
@@ -469,8 +484,13 @@ def _out(plan):
 @router.get("/rute")
 def rute(explicatie: bool = False):
     """Planul curent (cu inserarile facute de la planificare); il calculeaza daca nu exista inca."""
-    with _lock, _connect() as conn:
-        out = _out(_state["plan"] or _build_plan(conn))
+    with _lock:
+        plan = _state["plan"]
+    if plan is None:                    # baza de date doar cand planul inca nu exista
+        with _connect() as conn, _lock:
+            plan = _state["plan"] or _build_plan(conn)
+    with _lock:
+        out = _out(plan)
         if explicatie:
             out["explicatie"] = explain_plan(out, _state["bins"])
         return out
@@ -515,7 +535,7 @@ def reset_demo():
     Ghenele simulate revin la umplerea din sim_bins.json, depozitarile si raportarile de test se
     inchid, iar opririle bifate, fluxul live si pozitiile GPS se sterg. Senzorii reali raman cum sunt.
     """
-    with _lock, _connect() as conn:
+    with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         with conn.cursor() as cur:
             cur.executemany("""UPDATE rutare_pubele SET umplere = %s, actualizat = now(), golita_la = NULL
                                WHERE id = %s""",
@@ -534,14 +554,14 @@ def reset_demo():
 @router.post("/rute/planifica", dependencies=[Depends(cere_rol("admin"))])
 def planifica():
     """Planul de dimineata: recalculeaza tot din datele actuale."""
-    with _lock, _connect() as conn:
+    with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         return _out(_build_plan(conn))
 
 
 @router.post("/pubele/{bin_id}/golita")
 def golita(bin_id: str, date: dict | None = Depends(cere_rol("sofer", "admin"))):
     """Pentru pubelele simulate. Cele reale sunt detectate singure, din scaderea brusca a senzorului."""
-    with _lock, _connect() as conn:
+    with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         _verifica_oprire(date, bin_id)
         found = conn.execute("UPDATE rutare_pubele SET umplere = 0, actualizat = now() WHERE id = %s",
                              (bin_id,)).rowcount
@@ -599,7 +619,7 @@ class Raportare(BaseModel):
 @router.post("/alerte")
 def alerta(r: Raportare):
     """Backend-ul o cheama cand modelul Dariei detecteaza gunoi; acelasi punct de mai multe ori = o singura alerta."""
-    with _lock, _connect() as conn:
+    with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         return _register_alert(conn, r.sursa, r.lat, r.lng, r.marime, r.camera_id)
 
 
@@ -611,7 +631,7 @@ def lista_alerte():
 
 @router.post("/alerte/{alert_id}/colectata")
 def alerta_colectata(alert_id: str, date: dict | None = Depends(cere_rol("sofer", "admin"))):
-    with _lock, _connect() as conn:
+    with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         _verifica_oprire(date, alert_id)
         found = conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
                                 WHERE id = %s AND status <> 'colectata'""", (alert_id,)).rowcount
@@ -680,7 +700,7 @@ def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: f
     if not verdict["e_gunoi"]:
         return {"acceptat": False, "motiv": verdict.get("motiv") or verdict["descriere"]}
 
-    with _lock, _connect() as conn:
+    with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
         r = _register_alert(conn, "cetatean", lat, lng, verdict["marime"])
         if r["status"] != "duplicat":   # la duplicat ramane descrierea primului raport
             conn.execute("UPDATE rutare_alerte SET descriere = %s WHERE id = %s",
@@ -693,6 +713,21 @@ def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: f
 
 
 # ---------- soferi (aplicatia lui Mihai) ----------
+
+_NUME_GHENE = {"la": 0.0, "date": {}}
+NUME_GHENE_S = 60                   # numele si adresele se schimba rar: le citim cel mult o data pe minut
+
+
+def _nume_ghene():
+    """Numele si adresa ghenelor din trashes, tinute minte un minut. Soferii cer ruta si navigatia
+    des; fara asta, fiecare cerere deschidea o conexiune noua la baza de date doar pentru nume."""
+    if time.monotonic() - _NUME_GHENE["la"] > NUME_GHENE_S:
+        with _connect() as conn:
+            _NUME_GHENE["date"] = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
+                if _has_trashes(conn) else {}
+        _NUME_GHENE["la"] = time.monotonic()
+    return _NUME_GHENE["date"]
+
 
 @router.get("/ruta/{camion}")
 def ruta_camion(camion: int):
@@ -708,9 +743,7 @@ def ruta_camion(camion: int):
         alerte = {a["id"]: a for a in plan["alerts"]}
         stops, geometrie, distanta = list(ruta["stops"]), ruta["geometry"], ruta["distance_m"]
         incarcare, facute = ruta["load_l"], set(_state["facute"])
-    with _connect() as conn:            # numele si adresa ghenelor, din tabela lui Robert
-        info = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
-            if _has_trashes(conn) else {}
+    info = _nume_ghene()                # numele si adresa ghenelor, din tabela lui Robert
     info = {**SIM, **info}              # ghenele simulate au numele strazii din sim_bins.json
     opriri = []
     for sid in stops:
@@ -747,9 +780,7 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
         alerte = {a["id"]: a for a in plan["alerts"]}
         facute = set(_state["facute"])
         stops = [s for s in ruta["stops"] if s != "depot"]
-    with _connect() as conn:
-        info = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
-            if _has_trashes(conn) else {}
+    info = _nume_ghene()
     info = {**SIM, **info}              # ghenele simulate au numele strazii din sim_bins.json
 
     depou = (engine.DEPOT["lat"], engine.DEPOT["lng"])

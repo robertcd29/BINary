@@ -285,6 +285,7 @@ export function NavCard({ n, onComplete }: {
   onComplete: (stop: NavStop) => Promise<void>
 }) {
   const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState('')
 
   if (n.error) return <section className="panel nav-card"><p className="empty">{n.error}</p></section>
   if (!n.nav || !n.leg || !n.stop) {
@@ -296,8 +297,16 @@ export function NavCard({ n, onComplete }: {
   async function done() {
     if (!n.stop) return
     setBusy(true)
+    setFailed('')
     try {
       await onComplete(n.stop)
+    } catch (e) {
+      // fara mesaj, butonul doar revenea ca inainte si parea ca nu face nimic
+      setFailed(e instanceof Error ? e.message : 'Nu am putut salva. Încearcă din nou.')
+      setBusy(false)
+      return
+    }
+    try {
       await n.refresh(n.position)
     } finally {
       setBusy(false)
@@ -329,7 +338,7 @@ export function NavCard({ n, onComplete }: {
           <button className="primary-button" onClick={n.start}><Navigation2 size={17} /> Pornește navigația</button>
         ) : n.stop.tip !== 'depou' ? (
           <button className="primary-button" disabled={busy} onClick={done}>
-            {n.stop.tip === 'depozitare' ? 'Am colectat' : 'Am golit ghena'} · următoarea
+            {busy ? 'Se salvează…' : `${n.stop.tip === 'depozitare' ? 'Am colectat' : 'Am golit ghena'} · următoarea`}
           </button>
         ) : (
           <button className="secondary-button" onClick={n.stop_}><Square size={15} /> Oprește navigația</button>
@@ -354,6 +363,8 @@ export function NavCard({ n, onComplete }: {
           </button>
         )}
       </div>
+
+      {failed && <p className="nav-error" role="alert">{failed}</p>}
 
       <div className="nav-footer">
         <button className="link-button" onClick={n.toggleSim}>
