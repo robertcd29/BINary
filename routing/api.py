@@ -341,7 +341,8 @@ def precalculeaza():
 # ---------- rute ----------
 
 def _out(plan):
-    return {**_public(plan), "surse": _state["surse"], "evenimente": _state["evenimente"]}
+    return {**_public(plan), "surse": _state["surse"], "evenimente": _state["evenimente"],
+            "facute": sorted(_state["facute"])}     # opririle bifate azi, pentru progresul camioanelor
 
 
 @router.get("/rute")

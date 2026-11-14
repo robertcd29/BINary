@@ -8,838 +8,1150 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+        href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        /* Stilul comun BINary (acelasi si in aplicatia lui Mihai) */
+        /* ---------- sistemul vizual BINary: asfalt, hartie, vesta reflectorizanta ---------- */
         :root {
-            --asfalt: #23302a;
-            /* text, iconite */
-            --asfalt-2: #5d6b63;
-            /* text secundar */
-            --hartie: #eef1ec;
-            /* fundal */
-            --panou: #ffffff;
-            --linie: #d9dfd9;
-            --vesta: #ff6a13;
-            /* actiunea principala + depozitari ilegale */
-            --ok: #2f8f5b;
-            /* pubela sub 60% */
-            --atentie: #e3a21a;
-            /* 60-85% */
-            --plin: #c73e2a;
-            /* peste 85% */
-            --font: "Barlow", system-ui, sans-serif;
-            --font-cifre: "Barlow Condensed", "Barlow", system-ui, sans-serif;
+            color-scheme: light;
+            --ink: #15191a;
+            --ink-2: #3a4240;
+            --muted: #6c7471;
+            --faint: #9aa19e;
+            --line: #e3e1db;
+            --line-2: #eeece7;
+            --paper: #f4f3ef;
+            --surface: #ffffff;
+            --accent: #ef5a17;
+            --accent-hover: #d84c0e;
+            --accent-soft: #fdeee6;
+            --ok: #2e8a57;
+            --ok-soft: #e6f3ec;
+            --warn: #d99a06;
+            --warn-soft: #fbf3dc;
+            --full: #d2382d;
+            --full-soft: #fbe8e6;
+            --route: #2b59d9;
+            --radius: 10px;
+            --font: "Archivo", system-ui, -apple-system, sans-serif;
+            --mono: ui-monospace, "SF Mono", Menlo, monospace;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
-        html,
+        html, body { height: 100%; }
+
         body {
             margin: 0;
-            height: 100%;
-        }
-
-        body {
+            color: var(--ink);
+            background: var(--paper);
             font-family: var(--font);
-            font-size: 15px;
+            font-size: 14px;
             line-height: 1.45;
-            color: var(--asfalt);
-            background: var(--hartie);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        button { font: inherit; color: inherit; cursor: pointer; }
+        button:disabled { cursor: progress; opacity: .6; }
+        :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+        .num { font-variant-numeric: tabular-nums; }
+        .cond { font-stretch: 78%; }
+        .icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+        .app {
             display: grid;
-            grid-template-columns: 1fr 380px;
+            grid-template-rows: auto auto 1fr;
+            gap: 12px;
             height: 100vh;
+            padding: 12px 16px 16px;
         }
 
-        button {
-            font: inherit;
+        /* ---------- bara de sus ---------- */
+        .top {
+            display: flex;
+            align-items: center;
+            gap: 20px;
         }
 
-        :focus-visible {
-            outline: 3px solid var(--vesta);
-            outline-offset: 2px;
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-right: auto;
         }
 
-        /* ---------- harta ---------- */
-        #harta {
-            height: 100%;
-            background: #dfe4de;
+        .brand-mark {
+            display: grid;
+            place-items: center;
+            width: 34px;
+            height: 34px;
+            color: #fff;
+            background: var(--ink);
+            border-radius: 8px;
         }
 
-        .leaflet-container {
-            font-family: var(--font);
+        .brand-mark svg { width: 18px; height: 18px; }
+
+        .brand-name {
+            font-size: 22px;
+            font-weight: 800;
+            font-stretch: 80%;
+            letter-spacing: -.01em;
+            line-height: 1;
         }
 
-        /* harta de fundal in gri, ca pubelele si rutele sa iasa in fata */
-        .leaflet-tile-pane {
-            filter: grayscale(1) contrast(.85) brightness(1.06);
-        }
+        .brand-name b { color: var(--accent); font-weight: 800; }
 
-        .legenda {
-            background: var(--panou);
-            padding: 10px 12px;
-            border-radius: 6px;
-            border: 1px solid var(--linie);
-            font-size: 13px;
-            line-height: 1.9;
-        }
+        .brand-sub { color: var(--muted); font-size: 12.5px; }
 
-        .legenda .rand {
+        .live {
             display: flex;
             align-items: center;
             gap: 8px;
+            color: var(--muted);
+            font-size: 12.5px;
         }
 
-        /* pubela ca indicator de umplere: elementul care se tine minte */
-        .pubela {
-            width: 14px;
-            height: 19px;
-            border: 2px solid var(--asfalt);
-            border-radius: 2px 2px 4px 4px;
-            background: var(--panou);
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--ok);
+            border-radius: 50%;
+            box-shadow: 0 0 0 0 #2e8a5766;
+            animation: puls 2s infinite;
+        }
+
+        .live.eroare .live-dot { background: var(--full); animation: none; }
+        .live.eroare { color: var(--full); }
+
+        @keyframes puls {
+            70% { box-shadow: 0 0 0 7px #2e8a5700; }
+            100% { box-shadow: 0 0 0 0 #2e8a5700; }
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            height: 38px;
+            padding: 0 16px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+            font-weight: 600;
+        }
+
+        .btn-primary {
+            color: #fff;
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+        /* ---------- indicatori ---------- */
+        .kpis {
+            display: grid;
+            grid-template-columns: repeat(5, minmax(0, 1fr));
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+        }
+
+        .kpi {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            padding: 14px 18px 13px;
+            border-left: 1px solid var(--line-2);
+        }
+
+        .kpi:first-child { border-left: 0; }
+
+        .kpi-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--muted);
+            font-size: 12.5px;
+        }
+
+        .kpi-value {
+            font-size: 34px;
+            font-weight: 700;
+            font-stretch: 78%;
+            line-height: 1.05;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -.01em;
+        }
+
+        .kpi-value small { margin-left: 3px; color: var(--muted); font-size: 16px; font-weight: 600; }
+
+        .kpi-sub {
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 12.5px;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        .delta {
+            display: inline-block;
+            padding: 0 6px;
+            margin-right: 4px;
+            color: var(--ok);
+            background: var(--ok-soft);
+            border-radius: 4px;
+            font-weight: 700;
+        }
+
+        .kpi.alerta .kpi-value { color: var(--full); }
+
+        /* ---------- zona de lucru: harta + panou ---------- */
+        .work {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 420px;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .map-wrap {
             position: relative;
             overflow: hidden;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
         }
 
-        .pubela::before {
-            /* capacul */
-            content: "";
+        #harta { position: absolute; inset: 0; background: #eceae4; }
+        .dale { filter: grayscale(1) contrast(.82) brightness(1.08); }
+
+        .map-status {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: var(--asfalt);
-            z-index: 1;
+            z-index: 500;
+            top: 12px;
+            left: 12px;
+            display: none;
+            padding: 7px 11px;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: 0 2px 8px #0000000f;
+            font-size: 12.5px;
         }
 
-        .pubela i {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
+        .map-status.vizibil { display: block; }
+
+        .legenda {
+            display: flex;
+            gap: 14px;
+            padding: 7px 12px;
+            background: #ffffffeb;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            color: var(--ink-2);
+            font-size: 12px;
         }
 
-        .pubela.reala {
-            width: 20px;
-            height: 27px;
-            box-shadow: 0 0 0 3px var(--panou), 0 0 0 5px var(--asfalt);
+        .legenda span { display: inline-flex; align-items: center; gap: 6px; }
+
+        .legenda i {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
         }
 
-        .pubela.simulata {
-            opacity: .45;
-        }
-
-        /* pe harta, pubelele se micsoreaza cand dai zoom out (vezi scalaPubele) */
-        .leaflet-marker-icon .pubela {
+        /* pubela pe harta: inaltimea umplerii, culoarea pragului */
+        .pubela {
+            position: relative;
+            width: 14px;
+            height: 18px;
+            overflow: hidden;
+            background: #fff;
+            border: 2px solid var(--ink);
+            border-radius: 2px 2px 4px 4px;
             transform: scale(var(--scara-pubela, 1));
             transform-origin: 50% 100%;
         }
 
-        .info-pubela b {
-            display: block;
-            font-size: 15px;
+        .pubela::before {
+            position: absolute;
+            z-index: 1;
+            top: 0;
+            right: 0;
+            left: 0;
+            height: 2px;
+            content: "";
+            background: var(--ink);
         }
 
-        .info-pubela span {
-            display: block;
-            color: var(--asfalt-2);
+        .pubela i { position: absolute; right: 0; bottom: 0; left: 0; }
+
+        .pubela.pe-ruta { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--c, var(--route)); }
+        .pubela.offline { opacity: .45; border-style: dashed; }
+
+        .camion-live {
+            display: grid;
+            place-items: center;
+            width: 30px;
+            height: 30px;
+            color: #fff;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px #0004;
+            font-weight: 800;
+            font-size: 13px;
         }
 
         .depozitare {
             width: 16px;
             height: 16px;
-            background: var(--vesta);
-            border: 2px solid var(--asfalt);
-            transform: rotate(45deg);
+            background: var(--accent);
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px var(--accent), 0 2px 6px #0004;
         }
 
-        .depozitare.colectata {
-            background: var(--panou);
-        }
+        .depozitare.colectata { background: var(--faint); box-shadow: 0 0 0 1px var(--faint); }
 
         .depou {
-            width: 22px;
-            height: 22px;
-            background: var(--asfalt);
-            color: var(--panou);
-            border-radius: 4px;
             display: grid;
             place-items: center;
-            font: 700 13px var(--font-cifre);
-        }
-
-        .camion-live {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            border: 3px solid var(--panou);
-            box-shadow: 0 0 0 2px var(--asfalt);
+            width: 24px;
+            height: 24px;
             color: #fff;
-            display: grid;
-            place-items: center;
-            font: 700 15px var(--font-cifre);
+            background: var(--ink);
+            border: 2px solid #fff;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px #0004;
+            font-weight: 800;
+            font-size: 11px;
         }
 
-        .depozitare-poza {
-            display: block;
-            width: 220px;
-            height: 140px;
-            object-fit: cover;
-            border-radius: 4px;
-            margin-top: 6px;
+        .leaflet-tooltip.tip {
+            padding: 9px 11px;
+            color: var(--ink);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: 0 6px 18px #0000001a;
+            font-family: var(--font);
+            font-size: 12.5px;
         }
 
-        /* ---------- panoul lateral ---------- */
-        aside {
-            background: var(--panou);
-            border-left: 1px solid var(--linie);
+        .tip b { display: block; font-size: 13.5px; }
+        .tip .m { color: var(--muted); }
+
+        .leaflet-container { font-family: var(--font); }
+        .leaflet-popup-content-wrapper { border-radius: 10px; }
+        .leaflet-popup-content { margin: 12px 14px; font-size: 13px; }
+        .popup-poza { display: block; width: 220px; margin-top: 8px; border-radius: 6px; }
+
+        /* ---------- panoul din dreapta ---------- */
+        .side {
             display: flex;
             flex-direction: column;
             min-height: 0;
+            overflow: hidden;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
         }
 
-        header {
-            padding: 20px 22px 16px;
+        .tabs {
+            display: flex;
+            gap: 2px;
+            padding: 6px 6px 0;
+            border-bottom: 1px solid var(--line);
         }
 
-        .marca {
-            font: 700 30px/1 var(--font-cifre);
-            letter-spacing: -0.01em;
-            margin: 0;
+        .tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 9px 11px 10px;
+            color: var(--muted);
+            background: none;
+            border: 0;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -1px;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+
+        .tab .count {
+            min-width: 18px;
+            padding: 0 5px;
+            color: var(--ink-2);
+            background: var(--line-2);
+            border-radius: 9px;
+            font-size: 11.5px;
+            text-align: center;
+        }
+
+        .tab .count.hot { color: #fff; background: var(--accent); }
+
+        .panel { display: none; flex: 1; min-height: 0; overflow-y: auto; }
+        .panel.activ { display: block; }
+
+        .panel-head {
+            position: sticky;
+            z-index: 1;
+            top: 0;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 6px;
+            padding: 10px 14px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--line-2);
         }
 
-        .marca .pubela {
-            width: 18px;
-            height: 24px;
-        }
-
-        .azi {
-            color: var(--asfalt-2);
-            margin: 6px 0 0;
-        }
-
-        .rezumat {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            border-top: 1px solid var(--linie);
-            border-bottom: 1px solid var(--linie);
-        }
-
-        .rezumat div {
-            padding: 12px 22px;
-        }
-
-        .rezumat div+div {
-            border-left: 1px solid var(--linie);
-        }
-
-        .rezumat b {
-            display: block;
-            font: 600 28px/1.05 var(--font-cifre);
-        }
-
-        .rezumat span {
-            font-size: 13px;
-            color: var(--asfalt-2);
-        }
-
-        .rezumat .alarma b {
-            color: var(--plin);
-        }
-
-        .actiune {
-            padding: 16px 22px;
-        }
-
-        #planifica {
-            width: 100%;
-            padding: 13px 16px;
-            border: 0;
-            border-radius: 6px;
-            background: var(--vesta);
-            color: #1a1205;
+        .chip {
+            height: 28px;
+            padding: 0 11px;
+            color: var(--ink-2);
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            font-size: 12.5px;
             font-weight: 600;
-            font-size: 16px;
-            cursor: pointer;
         }
 
-        #planifica:hover {
-            background: #ff7d33;
-        }
+        .chip[aria-pressed="true"] { color: #fff; background: var(--ink); border-color: var(--ink); }
 
-        #planifica:disabled {
-            opacity: .6;
-            cursor: progress;
-        }
+        .list { margin: 0; padding: 0; list-style: none; }
 
-        #status {
-            margin: 8px 0 0;
-            font-size: 13px;
-            color: var(--asfalt-2);
-            min-height: 1.45em;
-        }
-
-        #status.eroare {
-            color: var(--plin);
-        }
-
-        .derulare {
-            overflow-y: auto;
-            flex: 1;
-            min-height: 0;
-        }
-
-        section {
-            padding: 4px 22px 18px;
-        }
-
-        h2 {
-            font: 600 19px/1.2 var(--font-cifre);
-            margin: 12px 0 8px;
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-        }
-
-        h2 small {
-            font: 400 13px var(--font);
-            color: var(--asfalt-2);
-        }
-
-        ul {
-            list-style: none;
-            margin: 0;
-            padding: 0;
-        }
-
-        .camion {
+        .row {
             display: grid;
-            grid-template-columns: 6px 1fr auto;
-            gap: 4px 12px;
-            padding: 10px 0;
-            border-top: 1px solid var(--linie);
+            width: 100%;
+            padding: 12px 14px;
+            text-align: left;
+            background: none;
+            border: 0;
+            border-bottom: 1px solid var(--line-2);
         }
 
-        .camion .culoare {
-            grid-row: span 2;
+        .row:hover { background: #faf9f6; }
+
+        .gol {
+            padding: 28px 18px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 13px;
+        }
+
+        /* camioane */
+        .truck {
+            grid-template-columns: 4px 1fr auto;
+            gap: 0 12px;
+        }
+
+        .truck-bar { grid-row: span 3; border-radius: 2px; background: var(--c); }
+        .truck-name { font-weight: 700; font-size: 14.5px; }
+        .truck-state { color: var(--muted); font-size: 12.5px; text-align: right; }
+        .truck-state.live { color: var(--ok); }
+
+        .truck-meta {
+            grid-column: 2 / 4;
+            display: flex;
+            gap: 14px;
+            color: var(--muted);
+            font-size: 12.5px;
+        }
+
+        .truck-meta b { color: var(--ink); font-weight: 600; }
+
+        .progress {
+            grid-column: 2 / 4;
+            height: 6px;
+            margin-top: 9px;
+            overflow: hidden;
+            background: var(--line-2);
             border-radius: 3px;
         }
 
-        .camion b {
+        .progress span { display: block; height: 100%; background: var(--c); border-radius: 3px; }
+
+        /* ghene */
+        .bin { grid-template-columns: 1fr 88px; gap: 2px 14px; align-items: center; }
+        .bin-name { overflow: hidden; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
+        .bin-addr { overflow: hidden; color: var(--muted); font-size: 12.5px; white-space: nowrap; text-overflow: ellipsis; }
+        .bin-fill { grid-row: span 2; text-align: right; }
+        .bin-pct { font-size: 18px; font-weight: 700; font-stretch: 78%; font-variant-numeric: tabular-nums; }
+
+        .meter {
+            height: 5px;
+            margin-top: 4px;
+            overflow: hidden;
+            background: var(--line-2);
+            border-radius: 3px;
+        }
+
+        .meter span { display: block; height: 100%; border-radius: 3px; }
+
+        .tags { grid-column: 1 / 3; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+
+        .tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            height: 22px;
+            padding: 0 8px;
+            color: var(--ink-2);
+            background: var(--line-2);
+            border-radius: 5px;
+            font-size: 11.5px;
             font-weight: 600;
         }
 
-        .camion .km {
-            font: 600 18px/1 var(--font-cifre);
-            text-align: right;
-        }
+        .tag.route { color: #fff; background: var(--c, var(--route)); }
+        .tag.warn { color: #8a6100; background: var(--warn-soft); }
+        .tag.full { color: var(--full); background: var(--full-soft); }
+        .tag.ok { color: var(--ok); background: var(--ok-soft); }
+        .tag.muted { color: var(--muted); }
 
-        .camion .detalii {
-            grid-column: 2 / 4;
-            font-size: 13px;
-            color: var(--asfalt-2);
-        }
+        /* raportari */
+        .report { grid-template-columns: 64px 1fr; gap: 12px; }
 
-        .raport {
-            display: grid;
-            grid-template-columns: 64px 1fr;
-            gap: 12px;
-            padding: 12px 0;
-            border-top: 1px solid var(--linie);
-            cursor: pointer;
-            width: 100%;
-            text-align: left;
-            background: none;
-            border-left: 0;
-            border-right: 0;
-            border-bottom: 0;
-            color: inherit;
-        }
-
-        .raport:hover .titlu {
-            text-decoration: underline;
-        }
-
-        .raport .miniatura {
-            width: 64px;
-            height: 64px;
-            border-radius: 4px;
-            object-fit: cover;
-            background: var(--hartie);
+        .thumb {
             display: grid;
             place-items: center;
-            font: 600 13px var(--font-cifre);
-            color: var(--asfalt-2);
+            width: 64px;
+            height: 64px;
+            overflow: hidden;
+            color: var(--muted);
+            background: var(--line-2);
+            border-radius: 7px;
+            object-fit: cover;
         }
 
-        .raport .titlu {
-            font-weight: 600;
-        }
+        .report-title { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+        .report-title time { color: var(--faint); font-weight: 500; font-size: 12px; white-space: nowrap; }
 
-        .raport p {
+        .report p {
+            display: -webkit-box;
             margin: 2px 0 6px;
-            font-size: 14px;
+            overflow: hidden;
+            color: var(--ink-2);
+            font-size: 12.5px;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
         }
 
-        .eticheta {
-            display: inline-block;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 2px 8px;
-            border-radius: 99px;
-            background: var(--hartie);
+        /* evenimente */
+        .event { grid-template-columns: 52px 1fr; gap: 10px; font-size: 13px; }
+        .event time { color: var(--faint); font-size: 12px; font-variant-numeric: tabular-nums; }
+        .event.nou { animation: aprins 2.4s ease-out; }
+        .event.important span { font-weight: 600; }
+
+        @keyframes aprins { from { background: var(--accent-soft); } to { background: transparent; } }
+
+        .side-foot {
+            padding: 9px 14px;
+            color: var(--faint);
+            border-top: 1px solid var(--line-2);
+            font-size: 11.5px;
         }
 
-        .eticheta.asignata {
-            background: #fff0e6;
-            color: #a8410a;
+        /* ---------- ecrane mai mici ---------- */
+        @media (max-width: 1180px) {
+            .app { height: auto; }
+            .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .kpi:nth-child(4) { border-left: 0; }
+            .kpi:nth-child(n+4) { border-top: 1px solid var(--line-2); }
+            .work { grid-template-columns: 1fr; }
+            .map-wrap { height: 62vh; min-height: 420px; }
+            .side { max-height: 80vh; }
         }
 
-        .eticheta.colectata {
-            background: #e5f2ea;
-            color: var(--ok);
-        }
-
-        .eticheta.respinsa {
-            background: #f8e5e2;
-            color: var(--plin);
-        }
-
-        .cand {
-            font-size: 12px;
-            color: var(--asfalt-2);
-            margin-left: 6px;
-        }
-
-        .eveniment {
-            padding: 9px 0 9px 12px;
-            border-top: 1px solid var(--linie);
-            border-left: 3px solid var(--vesta);
-            font-size: 14px;
-        }
-
-        .eveniment.linistit {
-            border-left-color: var(--ok);
-        }
-
-        .eveniment time {
-            display: block;
-            font-size: 12px;
-            color: var(--asfalt-2);
-        }
-
-        .eveniment.nou {
-            animation: aprinde 2.5s ease-out;
-        }
-
-        @keyframes aprinde {
-            from {
-                background: #ffe3d1;
-            }
-
-            to {
-                background: transparent;
-            }
-        }
-
-        .gol {
-            color: var(--asfalt-2);
-            font-size: 14px;
-            padding: 10px 0;
-            border-top: 1px solid var(--linie);
-        }
-
-        @media (max-width: 860px) {
-            body {
-                grid-template-columns: 1fr;
-                grid-template-rows: 55vh auto;
-                height: auto;
-            }
-
-            aside {
-                border-left: 0;
-                border-top: 1px solid var(--linie);
-            }
-
-            .derulare {
-                overflow: visible;
-            }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            * {
-                transition: none !important;
-                animation: none !important;
-            }
+        @media (max-width: 640px) {
+            .app { padding: 10px 12px 14px; }
+            .top { flex-wrap: wrap; gap: 10px; }
+            .live { order: 3; width: 100%; }
+            .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .kpi:nth-child(n) { border-left: 0; border-top: 1px solid var(--line-2); }
+            .kpi:nth-child(-n+2) { border-top: 0; }
+            .kpi:nth-child(even) { border-left: 1px solid var(--line-2); }
+            .kpi-value { font-size: 28px; }
+            .legenda { display: none; }
         }
     </style>
 </head>
 
 <body>
-    <div id="harta" role="application" aria-label="Harta pubelelor și a rutelor"></div>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="i-truck" viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></symbol>
+        <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+        <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></symbol>
+        <symbol id="i-bin" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+        <symbol id="i-flag" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+        <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+        <symbol id="i-camera" viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></symbol>
+        <symbol id="i-play" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.22-8.56"/><path d="M21 3v6h-6"/></symbol>
+    </svg>
 
-    <aside>
-        <header>
-            <h1 class="marca"><span class="pubela" aria-hidden="true"><i
-                        style="height:70%;background:var(--vesta)"></i></span>BINary</h1>
-            <p class="azi" id="azi">Timișoara</p>
+    <div class="app">
+        <header class="top">
+            <div class="brand">
+                <div class="brand-mark"><svg class="icon" style="stroke:#fff"><use href="#i-bin"/></svg></div>
+                <div>
+                    <div class="brand-name">BIN<b>ary</b></div>
+                    <div class="brand-sub" id="azi">Dispecerat Timișoara</div>
+                </div>
+            </div>
+            <div class="live" id="live" aria-live="polite"><span class="live-dot"></span><span id="status">Se conectează…</span></div>
+            <button class="btn btn-primary" id="planifica">
+                <svg class="icon"><use href="#i-play"/></svg>Planifică rutele de azi
+            </button>
         </header>
 
-        <div class="rezumat" aria-live="polite">
-            <div class="alarma"><b id="nr-pline">–</b><span>ghene de golit azi</span></div>
-            <div><b id="nr-depozitari">–</b><span>depozitări de ridicat</span></div>
-            <div><b id="km-total">–</b><span>km planificați</span></div>
-        </div>
+        <section class="kpis" aria-label="Indicatorii zilei">
+            <div class="kpi" id="k-golit">
+                <div class="kpi-label"><svg class="icon"><use href="#i-bin"/></svg>Ghene de golit azi</div>
+                <div class="kpi-value cond">–</div>
+                <div class="kpi-sub">&nbsp;</div>
+            </div>
+            <div class="kpi" id="k-km">
+                <div class="kpi-label"><svg class="icon"><use href="#i-route"/></svg>Distanță planificată</div>
+                <div class="kpi-value cond">–</div>
+                <div class="kpi-sub">&nbsp;</div>
+            </div>
+            <div class="kpi" id="k-co2" title="Camion de gunoi diesel: ~0,7 L/km, 2,68 kg CO₂ pe litru">
+                <div class="kpi-label"><svg class="icon"><use href="#i-leaf"/></svg>CO₂ evitat azi</div>
+                <div class="kpi-value cond">–</div>
+                <div class="kpi-sub">&nbsp;</div>
+            </div>
+            <div class="kpi" id="k-camioane">
+                <div class="kpi-label"><svg class="icon"><use href="#i-truck"/></svg>Camioane pe traseu</div>
+                <div class="kpi-value cond">–</div>
+                <div class="kpi-sub">&nbsp;</div>
+            </div>
+            <div class="kpi" id="k-raport">
+                <div class="kpi-label"><svg class="icon"><use href="#i-flag"/></svg>Depozitări de ridicat</div>
+                <div class="kpi-value cond">–</div>
+                <div class="kpi-sub">&nbsp;</div>
+            </div>
+        </section>
 
-        <div class="actiune">
-            <button id="planifica">Planifică rutele de azi</button>
-            <p id="status" role="status">Se încarcă planul curent…</p>
-        </div>
+        <main class="work">
+            <div class="map-wrap">
+                <div id="harta" role="application" aria-label="Harta ghenelor și a rutelor"></div>
+                <div class="map-status" id="map-status"></div>
+            </div>
 
-        <div class="derulare">
-            <section>
-                <h2>În timp real <small>de la senzori</small></h2>
-                <ul id="evenimente"></ul>
-            </section>
-            <section>
-                <h2>Camioane <small id="nr-camioane"></small></h2>
-                <ul id="camioane"></ul>
-            </section>
-            <section>
-                <h2>Depozitări ilegale <small>cele mai noi sus</small></h2>
-                <ul id="rapoarte"></ul>
-            </section>
-        </div>
-    </aside>
+            <aside class="side">
+                <nav class="tabs" role="tablist">
+                    <button class="tab" role="tab" aria-selected="true" data-panel="camioane">Camioane</button>
+                    <button class="tab" role="tab" aria-selected="false" data-panel="ghene">Ghene <span class="count" id="c-ghene">0</span></button>
+                    <button class="tab" role="tab" aria-selected="false" data-panel="raportari">Raportări <span class="count" id="c-raport">0</span></button>
+                    <button class="tab" role="tab" aria-selected="false" data-panel="evenimente">Live <span class="count" id="c-ev">0</span></button>
+                </nav>
+
+                <section class="panel activ" id="p-camioane" role="tabpanel"><ul class="list" id="l-camioane"></ul></section>
+
+                <section class="panel" id="p-ghene" role="tabpanel">
+                    <div class="panel-head" role="group" aria-label="Filtru">
+                        <button class="chip" data-filtru="degolit" aria-pressed="true">De golit</button>
+                        <button class="chip" data-filtru="pline" aria-pressed="false">Peste 85%</button>
+                        <button class="chip" data-filtru="toate" aria-pressed="false">Toate</button>
+                    </div>
+                    <ul class="list" id="l-ghene"></ul>
+                </section>
+
+                <section class="panel" id="p-raportari" role="tabpanel"><ul class="list" id="l-raport"></ul></section>
+                <section class="panel" id="p-evenimente" role="tabpanel"><ul class="list" id="l-ev"></ul></section>
+
+                <div class="side-foot" id="foot">Datele se actualizează automat la fiecare 5 secunde.</div>
+            </aside>
+        </main>
+    </div>
 
     <script>
         const REIMPROSPATARE_MS = 5000;
-        const CULORI_CAMIOANE = ["#2563c9", "#7a3fb0", "#0f8a8a", "#b5487a", "#5b6b1f"];
-        const STARE = {
-            deschisa: "În așteptare",
-            asignata: "Pe rută",
-            colectata: "Colectată",
-            respinsa: "Nu încape azi",
-        };
+        const CULORI = ["#2b59d9", "#7a4bc2", "#0e8c82", "#b5487a", "#5b6b1f"];
+        const CAPACITATE_L = 8000;              // un camion, ca in motorul de rutare
+        const KG_CO2_PE_KM = 0.7 * 2.68;        // ~0,7 L motorina/km, 2,68 kg CO2/L
+        const STARE_ALERTA = { deschisa: "Nouă", asignata: "Pe rută", colectata: "Colectată", duplicat: "Duplicat" };
 
-        // ---------- harta ----------
-        const harta = L.map("harta", { zoomControl: false }).setView([45.7537, 21.2257], 13);
-        L.control.zoom({ position: "topleft" }).addTo(harta);
+        // ---------- utilitare ----------
+        const $ = s => document.querySelector(s);
 
-        // pubele mai mici la zoom out: marime normala de la zoom 16, -15% pe nivel, minim 40%
-        function scalaPubele() {
-            const s = Math.max(0.4, Math.min(1, 1 - (16 - harta.getZoom()) * 0.15));
-            harta.getContainer().style.setProperty("--scara-pubela", s);
-        }
-        harta.on("zoomend", scalaPubele);
-        scalaPubele();
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap", maxZoom: 19,
-        }).addTo(harta);
-
-        const stratRute = L.layerGroup().addTo(harta);
-        const stratPubele = L.layerGroup().addTo(harta);
-        const stratDepozitari = L.layerGroup().addTo(harta);
-        const stratCamioane = L.layerGroup().addTo(harta);
-        const markeriDepozitari = {};
-        let primaIncarcare = true;
-
-        const legenda = L.control({ position: "bottomleft" });
-        legenda.onAdd = () => {
-            const d = L.DomUtil.create("div", "legenda");
-            d.innerHTML = `
-                <div class="rand"><span class="pubela"><i style="height:35%;background:var(--ok)"></i></span>Umplere sub 60%</div>
-                <div class="rand"><span class="pubela"><i style="height:72%;background:var(--atentie)"></i></span>60–85%</div>
-                <div class="rand"><span class="pubela"><i style="height:92%;background:var(--plin)"></i></span>Peste 85%</div>
-                <div class="rand"><span class="pubela reala" style="margin:0 3px"><i style="height:50%;background:var(--ok)"></i></span>Ghenă reală, cu adresă</div>
-                <div class="rand"><span class="depozitare" style="margin:0 2px"></span>Depozitare ilegală</div>`;
-            return d;
-        };
-        legenda.addTo(harta);
-
-        function culoareUmplere(p) {
-            return p >= 85 ? "var(--plin)" : p >= 60 ? "var(--atentie)" : "var(--ok)";
+        function el(tag, cls, text) {
+            const e = document.createElement(tag);
+            if (cls) e.className = cls;
+            if (text !== undefined) e.textContent = text;
+            return e;
         }
 
-        function iconPubela(umplere, reala) {
-            const p = Math.max(0, Math.min(100, Math.round(umplere ?? 0)));
-            const [w, h] = reala ? [20, 27] : [14, 19];
-            return L.divIcon({
-                className: "",
-                html: `<div class="pubela ${reala ? "reala" : "simulata"}"><i style="height:${p}%;background:${culoareUmplere(p)}"></i></div>`,
-                iconSize: [w, h], iconAnchor: [w / 2, h], tooltipAnchor: [w / 2 + 2, -h / 2],
-            });
+        function icon(name) {
+            const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            s.setAttribute("class", "icon");
+            const u = document.createElementNS("http://www.w3.org/2000/svg", "use");
+            u.setAttribute("href", `#i-${name}`);
+            s.append(u);
+            return s;
         }
 
-        // ---------- date ----------
         async function cere(metoda, url) {
             const r = await fetch(url, { method: metoda });
             if (!r.ok) throw new Error(`${r.status} la ${url}`);
             return r.json();
         }
 
-        async function pubele() {
-            try {
-                return await cere("GET", "/api/pubele");          // toate pubelele (reale + simulate)
-            } catch {
-                return (await cere("GET", "/api/pubele-fizice")).map(p => ({ ...p, reala: true }));
-            }
-        }
-
-        function element(tag, clasa, text) {
-            const e = document.createElement(tag);
-            if (clasa) e.className = clasa;
-            if (text !== undefined) e.textContent = text;
-            return e;
-        }
-
-        function timpTrecut(iso) {
-            const min = Math.round((Date.now() - new Date(iso)) / 60000);
-            if (min < 1) return "acum";
-            if (min < 60) return `acum ${min} min`;
-            const ore = Math.round(min / 60);
-            return ore < 24 ? `acum ${ore} h` : new Date(iso).toLocaleDateString("ro-RO");
-        }
-
+        const fmt = (n, d = 0) => Number(n).toLocaleString("ro-RO", { maximumFractionDigits: d, minimumFractionDigits: d });
+        const culoareUmplere = p => p >= 85 ? "var(--full)" : p >= 60 ? "var(--warn)" : "var(--ok)";
         const numeCamion = t => `Camion ${t + 1}`;
 
-        // ---------- desenare ----------
-        function deseneazaRute(plan) {
-            deseneazaEvenimente(plan.evenimente);
+        function timpTrecut(iso) {
+            const s = Math.round((Date.now() - new Date(iso)) / 1000);
+            if (s < 60) return "acum";
+            const m = Math.round(s / 60);
+            if (m < 60) return `acum ${m} min`;
+            const h = Math.round(m / 60);
+            return h < 24 ? `acum ${h} h` : new Date(iso).toLocaleDateString("ro-RO");
+        }
+
+        function setKpi(id, valoare, sub, unitate) {
+            const k = document.getElementById(id);
+            const v = k.querySelector(".kpi-value");
+            v.textContent = valoare;
+            if (unitate) v.append(el("small", "", unitate));
+            const s = k.querySelector(".kpi-sub");
+            s.replaceChildren();
+            if (sub instanceof Node) s.append(sub); else s.textContent = sub || " ";
+        }
+
+        // ---------- harta ----------
+        const harta = L.map("harta", { zoomControl: false }).setView([45.7537, 21.2257], 13);
+        L.control.zoom({ position: "topright" }).addTo(harta);
+        // dale OpenStreetMap (fara cheie API), desaturate prin CSS ca datele sa iasa in fata
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            attribution: "© OpenStreetMap", maxZoom: 19, className: "dale",
+        }).addTo(harta);
+
+        // pubelele se micsoreaza cand dai zoom out
+        function scalaPubele() {
+            const s = Math.max(0.4, Math.min(1, 1 - (16 - harta.getZoom()) * 0.15));
+            harta.getContainer().style.setProperty("--scara-pubela", s);
+        }
+        harta.on("zoomend", scalaPubele);
+        scalaPubele();
+
+        const stratRute = L.layerGroup().addTo(harta);
+        const stratPubele = L.layerGroup().addTo(harta);
+        const stratDepozitari = L.layerGroup().addTo(harta);
+        const stratCamioane = L.layerGroup().addTo(harta);
+
+        const legenda = L.control({ position: "bottomleft" });
+        legenda.onAdd = () => {
+            const d = L.DomUtil.create("div", "legenda");
+            d.innerHTML = `<span><i style="background:var(--ok)"></i>sub 60%</span>
+                <span><i style="background:var(--warn)"></i>60–85%</span>
+                <span><i style="background:var(--full)"></i>peste 85%</span>
+                <span><i style="background:var(--accent);border-radius:50%"></i>depozitare ilegală</span>`;
+            return d;
+        };
+        legenda.addTo(harta);
+
+        // ---------- starea paginii ----------
+        let stare = { pubele: [], plan: null, alerte: [], pozitii: [] };
+        let filtruGhene = "degolit";
+        let rutaEvidentiata = null;
+        const liniiRute = {};          // camion -> polylines, pentru evidentiere
+        const markeriPubele = {};
+
+        // pe ce camion si la a cata oprire e fiecare ghena
+        function opririle(plan) {
+            const m = {};
+            (plan?.routes || []).forEach(r => {
+                r.stops.filter(s => s !== "depot").forEach((s, i, arr) => { m[s] = { truck: r.truck, i: i + 1, n: arr.length }; });
+            });
+            return m;
+        }
+
+        // ---------- desen: pubele ----------
+        function iconPubela(p, oprire) {
+            const u = Math.max(0, Math.min(100, Math.round(p.umplere ?? 0)));
+            const cls = ["pubela", oprire ? "pe-ruta" : "", p.pe_ruta_posibil === false ? "offline" : ""].join(" ");
+            const c = oprire ? `--c:${CULORI[oprire.truck % CULORI.length]}` : "";
+            return L.divIcon({
+                className: "",
+                html: `<div class="${cls}" style="${c}"><i style="height:${u}%;background:${culoareUmplere(u)}"></i></div>`,
+                iconSize: [14, 18], iconAnchor: [7, 18], tooltipAnchor: [9, -9],
+            });
+        }
+
+        function tooltipPubela(p, oprire, pred) {
+            const d = el("div");
+            d.append(el("b", "", p.nume || p.id));
+            if (p.adresa) d.append(el("div", "m", p.adresa));
+            d.append(el("div", "", `Umplere ${Math.round(p.umplere ?? 0)}%`));
+            if (oprire) d.append(el("div", "", `${numeCamion(oprire.truck)} · oprirea ${oprire.i} din ${oprire.n}`));
+            if (pred?.hours_to_full != null && pred.hours_to_full < 72) d.append(el("div", "m", `Se umple în ~${fmt(pred.hours_to_full)} h`));
+            if (p.pe_ruta_posibil === false) d.append(el("div", "m", "Prea departe de rețeaua rutieră din hartă"));
+            return d;
+        }
+
+        function deseneazaPubele() {
+            const { pubele, plan } = stare;
+            const op = opririle(plan);
+            stratPubele.clearLayers();
+            pubele.forEach(p => {
+                const m = L.marker([p.lat, p.lng], { icon: iconPubela(p, op[p.id]), zIndexOffset: op[p.id] ? 1000 : 0 })
+                    .bindTooltip(tooltipPubela(p, op[p.id], plan?.predictions?.[p.id]), { className: "tip", direction: "right" });
+                markeriPubele[p.id] = m;
+                m.addTo(stratPubele);
+            });
+        }
+
+        // ---------- desen: rute ----------
+        function deseneazaRute() {
+            const plan = stare.plan;
             stratRute.clearLayers();
-            plan.routes.forEach((r, i) => {
-                const culoare = CULORI_CAMIOANE[i % CULORI_CAMIOANE.length];
-                L.polyline(r.geometry, { color: "#fff", weight: 8, opacity: .9 }).addTo(stratRute);
-                L.polyline(r.geometry, { color: culoare, weight: 4 })
-                    .bindTooltip(`${numeCamion(r.truck)}: ${(r.distance_m / 1000).toFixed(1)} km`, { sticky: true })
+            if (!plan) return;
+            plan.routes.forEach(r => {
+                if (r.geometry.length < 2) return;
+                const c = CULORI[r.truck % CULORI.length];
+                const slaba = rutaEvidentiata != null && rutaEvidentiata !== r.truck;
+                const casing = L.polyline(r.geometry, { color: "#fff", weight: 9, opacity: slaba ? .3 : .95 }).addTo(stratRute);
+                const linie = L.polyline(r.geometry, { color: c, weight: rutaEvidentiata === r.truck ? 6 : 4.5, opacity: slaba ? .25 : 1 })
+                    .bindTooltip(`${numeCamion(r.truck)} · ${fmt(r.distance_m / 1000, 1)} km`, { sticky: true, className: "tip" })
                     .addTo(stratRute);
+                liniiRute[r.truck] = [casing, linie];
             });
             const depou = plan.routes[0]?.geometry[0];
             if (depou) {
-                L.marker(depou, { icon: L.divIcon({ className: "", html: '<div class="depou">D</div>', iconSize: [22, 22] }) })
-                    .bindTooltip("Depoul, de aici pleacă toate camioanele").addTo(stratRute);
+                L.marker(depou, { icon: L.divIcon({ className: "", html: '<div class="depou">D</div>', iconSize: [24, 24] }) })
+                    .bindTooltip("Depou", { className: "tip" }).addTo(stratRute);
             }
-
-            const lista = document.getElementById("camioane");
-            lista.replaceChildren();
-            plan.routes.forEach((r, i) => {
-                const li = element("li", "camion");
-                const bara = element("span", "culoare");
-                bara.style.background = CULORI_CAMIOANE[i % CULORI_CAMIOANE.length];
-                const opriri = r.stops.filter(s => s !== "depot").length;
-                li.append(bara, element("b", "", numeCamion(r.truck)),
-                    element("span", "km", `${(r.distance_m / 1000).toFixed(1)} km`),
-                    element("span", "detalii", `${opriri} opriri, ${Math.round(r.load_l).toLocaleString("ro-RO")} L de ridicat`));
-                lista.append(li);
-            });
-            document.getElementById("nr-camioane").textContent = `${plan.routes.length} pe traseu`;
-            document.getElementById("km-total").textContent = (plan.total_distance_m / 1000).toFixed(1);
         }
 
-        const numePubele = {};      // id -> nume, pentru fluxul de evenimente
-
-        function deseneazaPubele(lista) {
-            stratPubele.clearLayers();
-            lista.forEach(p => { numePubele[p.id] = p.nume || p.id; });
-            lista.forEach(p => {
-                const m = L.marker([p.lat, p.lng ?? p.lon], {
-                    icon: iconPubela(p.umplere, p.reala),
-                    zIndexOffset: p.reala ? 1000 : 0,          // ghenele reale deasupra celor simulate
-                });
-                if (p.reala) {
-                    const info = element("div", "info-pubela");
-                    info.append(element("b", "", p.nume || p.id),
-                        element("span", "", p.adresa || "Adresă necunoscută"),
-                        element("span", "", `Umplere: ${Math.round(p.umplere ?? 0)}%`));
-                    if (p.pe_ruta_posibil === false)
-                        info.append(element("span", "", "Prea departe de o stradă din hartă: nu poate fi pusă pe rută"));
-                    m.bindTooltip(info);
-                } else {
-                    m.bindTooltip(`Pubelă simulată ${p.id}: ${Math.round(p.umplere ?? 0)}%`);
-                }
-                m.addTo(stratPubele);
-            });
-            document.getElementById("nr-pline").textContent = lista.filter(p => p.umplere > 0).length;
+        function evidentiaza(truck) {
+            rutaEvidentiata = truck;
+            deseneazaRute();
         }
 
-        function deseneazaDepozitari(alerte) {
+        // ---------- desen: depozitari si camioane ----------
+        function deseneazaDepozitari() {
             stratDepozitari.clearLayers();
-            const lista = document.getElementById("rapoarte");
-            lista.replaceChildren();
-            const deRidicat = alerte.filter(a => a.status !== "colectata");
-            document.getElementById("nr-depozitari").textContent = deRidicat.length;
-
-            if (!alerte.length) {
-                lista.append(element("li", "gol", "Nicio depozitare raportată azi. Rapoartele cetățenilor și ale camerelor apar aici."));
-                return;
-            }
-
-            alerte.forEach(a => {
-                const dinCetatean = a.sursa === "cetatean";
-                const titlu = dinCetatean ? "Raportată de un cetățean" : `Camera ${a.camera_id ?? ""}`.trim();
-                const stare = a.status === "asignata" && a.camion != null
-                    ? `Pe ruta camionului ${a.camion + 1}` : (STARE[a.status] ?? a.status);
-
-                // marker pe harta
+            stare.alerte.filter(a => a.status !== "duplicat").forEach(a => {
                 const m = L.marker([a.lat, a.lng], {
                     icon: L.divIcon({ className: "", html: `<div class="depozitare${a.status === "colectata" ? " colectata" : ""}"></div>`, iconSize: [16, 16] }),
+                    zIndexOffset: 1500,
                 }).addTo(stratDepozitari);
-                const popup = element("div");
-                popup.append(element("b", "", `${titlu} (${a.id})`), element("div", "", stare));
-                if (a.descriere) popup.append(element("div", "", a.descriere));
-                if (dinCetatean) {
-                    const img = element("img", "depozitare-poza");
+                const p = el("div");
+                p.append(el("b", "", a.sursa === "cetatean" ? "Raportată de un cetățean" : `Camera ${a.camera_id ?? ""}`.trim()));
+                p.append(el("div", "", STARE_ALERTA[a.status] || a.status));
+                if (a.descriere) p.append(el("div", "", a.descriere));
+                if (a.sursa === "cetatean") {
+                    const img = el("img", "popup-poza");
                     img.src = `/captures/${a.id}.jpg`;
                     img.alt = "Poza trimisă de cetățean";
                     img.onerror = () => img.remove();
-                    popup.append(img);
+                    p.append(img);
                 }
-                m.bindPopup(popup);
-                markeriDepozitari[a.id] = m;
+                m.bindPopup(p);
+                a._marker = m;
+            });
+        }
 
-                // rand in lista
-                const li = element("li");
-                const buton = element("button", "raport");
-                buton.onclick = () => { harta.flyTo([a.lat, a.lng], 16); m.openPopup(); };
-                let mini;
-                if (dinCetatean) {
-                    mini = element("img", "miniatura");
-                    mini.src = `/captures/${a.id}.jpg`;
-                    mini.alt = "";
-                    mini.onerror = () => mini.replaceWith(element("span", "miniatura", "Fără poză"));
-                } else {
-                    mini = element("span", "miniatura", "Cameră");
+        function deseneazaCamioane() {
+            stratCamioane.clearLayers();
+            stare.pozitii.forEach(p => {
+                L.marker([p.lat, p.lng], {
+                    icon: L.divIcon({ className: "", html: `<div class="camion-live" style="background:${CULORI[p.camion % CULORI.length]}">${p.camion + 1}</div>`, iconSize: [30, 30] }),
+                    zIndexOffset: 2000,
+                }).bindTooltip(`${numeCamion(p.camion)} · GPS ${timpTrecut(p.la)}`, { className: "tip" }).addTo(stratCamioane);
+            });
+        }
+
+        // ---------- indicatori ----------
+        function deseneazaKpi() {
+            const { pubele, plan, alerte, pozitii } = stare;
+            const deGolit = pubele.filter(p => (p.umplere ?? 0) > 0);
+            const pline = pubele.filter(p => (p.umplere ?? 0) >= 85).length;
+            setKpi("k-golit", fmt(deGolit.length), `din ${pubele.length} ghene · ${pline} peste 85%`);
+            document.getElementById("k-golit").classList.toggle("alerta", pline > 0);
+
+            const m = plan?.metrics;
+            if (m) {
+                const sub = el("span");
+                if (m.baseline_km) {
+                    sub.append(el("span", "delta", `−${fmt(m.saving_pct)}%`), `față de ${fmt(m.baseline_km, 1)} km fără optimizare`);
                 }
-                const text = element("div");
-                const rand = element("div");
-                rand.append(element("span", `eticheta ${a.status}`, stare), element("span", "cand", timpTrecut(a.creata)));
-                text.append(element("div", "titlu", titlu));
-                text.append(element("p", "", a.descriere || `Mărime estimată: ${a.marime ?? "medie"}`
-                    + (a.nr_raportari > 1 ? `, raportată de ${a.nr_raportari} ori` : "")));
-                text.append(rand);
-                buton.append(mini, text);
-                li.append(buton);
+                setKpi("k-km", fmt(m.total_km, 1), sub, "km");
+                const kmEconomisiti = Math.max(0, (m.baseline_km ?? m.total_km) - m.total_km);
+                setKpi("k-co2", fmt(kmEconomisiti * KG_CO2_PE_KM), `~${fmt(kmEconomisiti * 0.7)} L motorină economisiți`, "kg");
+                const live = pozitii.filter(p => Date.now() - new Date(p.la) < 120_000).length;
+                setKpi("k-camioane", `${m.trucks_used}`, live ? `${live} cu GPS activ acum` : "niciun GPS activ acum", `/ ${plan.routes.length}`);
+            }
+
+            const deschise = alerte.filter(a => a.status === "deschisa" || a.status === "asignata");
+            const cet = deschise.filter(a => a.sursa === "cetatean").length;
+            setKpi("k-raport", fmt(deschise.length), `${cet} de la cetățeni · ${deschise.length - cet} de la camere`);
+        }
+
+        // ---------- panou: camioane ----------
+        function deseneazaCamioaneLista() {
+            const lista = $("#l-camioane");
+            lista.replaceChildren();
+            const plan = stare.plan;
+            if (!plan) { lista.append(el("li", "gol", "Rutele de azi nu sunt încă planificate.")); return; }
+            const facute = new Set(plan.facute || []);
+            plan.routes.forEach(r => {
+                const opriri = r.stops.filter(s => s !== "depot");
+                const gata = opriri.filter(s => facute.has(s)).length;
+                const poz = stare.pozitii.find(p => p.camion === r.truck);
+                const live = poz && Date.now() - new Date(poz.la) < 120_000;
+                const c = CULORI[r.truck % CULORI.length];
+
+                const li = el("li");
+                const b = el("button", "row truck");
+                b.style.setProperty("--c", c);
+                b.append(el("span", "truck-bar"));
+                b.append(el("span", "truck-name", numeCamion(r.truck)));
+                b.append(el("span", `truck-state${live ? " live" : ""}`,
+                    !opriri.length ? "În depou" : live ? `GPS ${timpTrecut(poz.la)}` : "Fără GPS"));
+                const meta = el("span", "truck-meta");
+                const f = (v, t) => { const s = el("span"); s.append(el("b", "", v), ` ${t}`); return s; };
+                meta.append(f(`${gata}/${opriri.length}`, "opriri"), f(fmt(r.distance_m / 1000, 1), "km"),
+                    f(`${fmt(Math.round(r.load_l / CAPACITATE_L * 100))}%`, "încărcare"));
+                b.append(meta);
+                const pr = el("span", "progress");
+                const bar = el("span");
+                bar.style.width = `${opriri.length ? gata / opriri.length * 100 : 0}%`;
+                pr.append(bar);
+                b.append(pr);
+
+                b.onmouseenter = () => evidentiaza(r.truck);
+                b.onmouseleave = () => evidentiaza(null);
+                b.onclick = () => r.geometry.length > 1 && harta.fitBounds(r.geometry, { padding: [60, 60] });
+                li.append(b);
                 lista.append(li);
             });
         }
 
-        // ---------- camioanele, din GPS-ul aplicatiei soferului ----------
-        function deseneazaCamioane(pozitii) {
-            stratCamioane.clearLayers();
-            pozitii.forEach(p => {
-                const culoare = CULORI_CAMIOANE[p.camion % CULORI_CAMIOANE.length];
-                const secunde = Math.round((Date.now() - new Date(p.la)) / 1000);
-                const cand = secunde < 60 ? `acum ${secunde} s` : `acum ${Math.round(secunde / 60)} min`;
-                L.marker([p.lat, p.lng], {
-                    icon: L.divIcon({
-                        className: "",
-                        html: `<div class="camion-live" style="background:${culoare}">${p.camion + 1}</div>`,
-                        iconSize: [30, 30],
-                    }),
-                    zIndexOffset: 2000,
-                }).bindTooltip(`${numeCamion(p.camion)}, poziție GPS ${cand}`).addTo(stratCamioane);
-            });
-        }
-
-        // ---------- evenimente de la senzori ----------
-        const vazute = new Set();
-        let primeleEvenimente = true;
-
-        function textEveniment(e) {
-            const nume = numePubele[e.id] || e.id;
-            if (e.status === "golita") return [`${nume} a fost golită.`, true];
-            if (e.status === "citire") return [`${nume}: umplere ${e.inainte}% → ${e.umplere}%.`, e.umplere < 85];
-            if (e.status === "assigned") return [`${nume} are deșeuri și a fost adăugată pe ruta camionului ${e.truck + 1}`
-                + (e.extra_m ? ` (+${(e.extra_m / 1000).toFixed(1)} km).` : "."), false];
-            if (e.status === "pending") return [`${nume} are deșeuri, dar niciun camion nu mai are loc azi.`, false];
-            if (e.status === "rejected") return [`${nume} are deșeuri, dar nu poate fi adăugată pe o rută (${e.reason}).`, false];
-            if (e.reason === "e deja pe o ruta") return [`${nume} are deșeuri. E deja pe ruta de azi.`, true];
-            if (e.status === "urgenta") return [`${nume} are deșeuri. Intră în primul plan calculat.`, false];
-            return [`${nume}: ${e.status}`, true];
-        }
-
-        function deseneazaEvenimente(evenimente = []) {
-            const lista = document.getElementById("evenimente");
+        // ---------- panou: ghene ----------
+        function deseneazaGhene() {
+            const lista = $("#l-ghene");
             lista.replaceChildren();
-            if (!evenimente.length) {
-                lista.append(element("li", "gol", "Nimic nou încă. Orice schimbare de umplere a unei ghene sau o golire apare aici."));
+            const op = opririle(stare.plan);
+            const pred = stare.plan?.predictions || {};
+            let pubele = [...stare.pubele].sort((a, b) => (b.umplere ?? 0) - (a.umplere ?? 0));
+            if (filtruGhene === "degolit") pubele = pubele.filter(p => (p.umplere ?? 0) > 0);
+            if (filtruGhene === "pline") pubele = pubele.filter(p => (p.umplere ?? 0) >= 85);
+            $("#c-ghene").textContent = stare.pubele.filter(p => (p.umplere ?? 0) > 0).length;
+            if (!pubele.length) {
+                lista.append(el("li", "gol", filtruGhene === "toate" ? "Nicio ghenă în baza de date." : "Nicio ghenă în această categorie. Bine!"));
                 return;
             }
-            [...evenimente].reverse().slice(0, 6).forEach(e => {
-                const cheie = `${e.id}|${e.status}|${e.la}`;
-                const [text, linistit] = textEveniment(e);
-                const li = element("li", `eveniment${linistit ? " linistit" : ""}`);
-                if (!primeleEvenimente && !vazute.has(cheie)) li.classList.add("nou");
-                vazute.add(cheie);
-                const cand = element("time", "", new Date(e.la).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" }));
-                li.append(cand, element("span", "", text));
+            pubele.forEach(p => {
+                const u = Math.round(p.umplere ?? 0);
+                const li = el("li");
+                const b = el("button", "row bin");
+                b.append(el("span", "bin-name", p.nume || p.id));
+                const fill = el("span", "bin-fill");
+                fill.append(el("span", "bin-pct", `${u}%`));
+                const meter = el("div", "meter");
+                const bar = el("span");
+                bar.style.width = `${u}%`;
+                bar.style.background = culoareUmplere(u);
+                meter.append(bar);
+                fill.append(meter);
+                b.append(fill);
+                b.append(el("span", "bin-addr", p.adresa || p.id));
+
+                const tags = el("span", "tags");
+                const o = op[p.id];
+                if (o) {
+                    const t = el("span", "tag route", `${numeCamion(o.truck)} · oprirea ${o.i}/${o.n}`);
+                    t.style.setProperty("--c", CULORI[o.truck % CULORI.length]);
+                    tags.append(t);
+                } else if (u > 0 && p.pe_ruta_posibil !== false) {
+                    tags.append(el("span", "tag warn", "Neplanificată încă"));
+                }
+                if (u >= 85) tags.append(el("span", "tag full", "Aproape plină"));
+                const h = pred[p.id]?.hours_to_full;
+                if (h != null && h < 72 && u < 100) tags.append(el("span", "tag muted", `Plină în ~${fmt(h)} h`));
+                if (p.pe_ruta_posibil === false) tags.append(el("span", "tag muted", "În afara rețelei rutiere"));
+                if (u === 0) tags.append(el("span", "tag ok", "Goală"));
+                b.append(tags);
+
+                b.onclick = () => { harta.flyTo([p.lat, p.lng], 17, { duration: .6 }); markeriPubele[p.id]?.openTooltip(); };
+                li.append(b);
                 lista.append(li);
             });
-            primeleEvenimente = false;
         }
 
-        // ---------- reimprospatare ----------
-        let ruteInCurs = false;     // cererea pentru rute poate dura cat se calculeaza planul
-        let areRute = false;
-
-        function ora() {
-            return new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+        // ---------- panou: raportari ----------
+        function deseneazaRaportari() {
+            const lista = $("#l-raport");
+            lista.replaceChildren();
+            const alerte = stare.alerte.filter(a => a.status !== "duplicat");
+            const deschise = alerte.filter(a => a.status !== "colectata").length;
+            const c = $("#c-raport");
+            c.textContent = deschise;
+            c.classList.toggle("hot", deschise > 0);
+            if (!alerte.length) {
+                lista.append(el("li", "gol", "Nicio depozitare raportată azi. Rapoartele cetățenilor și ale camerelor apar aici, verificate automat."));
+                return;
+            }
+            alerte.forEach(a => {
+                const cetatean = a.sursa === "cetatean";
+                const li = el("li");
+                const b = el("button", "row report");
+                let thumb;
+                if (cetatean) {
+                    thumb = el("img", "thumb");
+                    thumb.src = `/captures/${a.id}.jpg`;
+                    thumb.alt = "";
+                    thumb.loading = "lazy";
+                    thumb.onerror = () => { const s = el("span", "thumb"); s.append(icon("flag")); thumb.replaceWith(s); };
+                } else {
+                    thumb = el("span", "thumb");
+                    thumb.append(icon("camera"));
+                }
+                const body = el("div");
+                const t = el("div", "report-title");
+                t.append(el("span", "", cetatean ? "Raport cetățean" : `Camera ${a.camera_id ?? ""}`.trim()), el("time", "", timpTrecut(a.creata)));
+                body.append(t);
+                body.append(el("p", "", a.descriere || `Mărime estimată: ${a.marime ?? "medie"}`));
+                const tags = el("div", "tags");
+                tags.style.margin = "0";
+                const st = el("span", `tag ${a.status === "colectata" ? "ok" : a.status === "asignata" ? "route" : "warn"}`,
+                    a.status === "asignata" && a.camion != null ? `Pe ruta camionului ${a.camion + 1}` : STARE_ALERTA[a.status] || a.status);
+                if (a.status === "asignata" && a.camion != null) st.style.setProperty("--c", CULORI[a.camion % CULORI.length]);
+                tags.append(st);
+                if (a.marime) tags.append(el("span", "tag muted", `Mărime ${a.marime}`));
+                if (a.nr_raportari > 1) tags.append(el("span", "tag muted", `Raportată de ${a.nr_raportari} ori`));
+                body.append(tags);
+                b.append(thumb, body);
+                b.onclick = () => { harta.flyTo([a.lat, a.lng], 17, { duration: .6 }); a._marker?.openPopup(); };
+                li.append(b);
+                lista.append(li);
+            });
         }
 
-        async function actualizeaza(plan) {
-            // pubelele si depozitarile apar imediat; rutele vin separat, cand sunt gata
-            const [p, alerte, pozitii] = await Promise.all([
-                pubele(), cere("GET", "/api/alerte"), cere("GET", "/api/pozitii").catch(() => []),
+        // ---------- panou: evenimente live ----------
+        const vazute = new Set();
+        let primele = true;
+        let necitite = 0;
+
+        function textEveniment(e) {
+            const p = stare.pubele.find(x => x.id === e.id);
+            const nume = p?.nume || e.id;
+            switch (e.status) {
+                case "golita": return [`${nume} a fost golită`, false];
+                case "citire": return [`${nume}: umplere ${e.inainte}% → ${e.umplere}%`, e.umplere >= 85];
+                case "assigned": return [`${nume} a fost adăugată pe ruta camionului ${e.truck + 1}` + (e.extra_m ? ` (+${fmt(e.extra_m / 1000, 1)} km)` : ""), true];
+                case "pending": return [`${nume} are deșeuri, dar niciun camion nu mai are loc azi`, true];
+                case "rejected": return [`${nume} nu poate fi pusă pe o rută (${e.reason})`, true];
+                case "urgenta": return [e.reason === "e deja pe o ruta" ? `${nume} are deșeuri și e deja pe ruta de azi` : `${nume} are deșeuri; intră în primul plan`, false];
+                default: return [`${nume}: ${e.status}`, false];
+            }
+        }
+
+        function deseneazaEvenimente() {
+            const lista = $("#l-ev");
+            const ev = stare.plan?.evenimente || [];
+            lista.replaceChildren();
+            if (!ev.length) {
+                lista.append(el("li", "gol", "Nimic nou încă. Orice schimbare de umplere, golire sau ghenă adăugată pe rută apare aici în timp real."));
+            }
+            let noi = 0;
+            [...ev].reverse().slice(0, 40).forEach(e => {
+                const cheie = `${e.id}|${e.status}|${e.la}`;
+                const [text, important] = textEveniment(e);
+                const li = el("li", `row event${important ? " important" : ""}`);
+                if (!primele && !vazute.has(cheie)) { li.classList.add("nou"); noi++; }
+                vazute.add(cheie);
+                li.append(el("time", "", new Date(e.la).toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" })), el("span", "", text));
+                lista.append(li);
+            });
+            if (!$("#p-evenimente").classList.contains("activ")) necitite += noi;
+            const c = $("#c-ev");
+            c.textContent = necitite || ev.length;
+            c.classList.toggle("hot", necitite > 0);
+            primele = false;
+        }
+
+        // ---------- tab-uri si filtre ----------
+        document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+            document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+            document.querySelectorAll(".panel").forEach(p => p.classList.toggle("activ", p.id === `p-${t.dataset.panel}`));
+            if (t.dataset.panel === "evenimente") { necitite = 0; deseneazaEvenimente(); }
+        });
+
+        document.querySelectorAll("[data-filtru]").forEach(c => c.onclick = () => {
+            filtruGhene = c.dataset.filtru;
+            document.querySelectorAll("[data-filtru]").forEach(x => x.setAttribute("aria-pressed", x === c));
+            deseneazaGhene();
+        });
+
+        // ---------- date ----------
+        function seteazaStatus(text, eroare = false) {
+            $("#status").textContent = text;
+            $("#live").classList.toggle("eroare", eroare);
+        }
+
+        function stareHarta(text) {
+            const s = $("#map-status");
+            s.textContent = text || "";
+            s.classList.toggle("vizibil", !!text);
+        }
+
+        function deseneazaTot() {
+            deseneazaRute();
+            deseneazaPubele();
+            deseneazaDepozitari();
+            deseneazaCamioane();
+            deseneazaKpi();
+            deseneazaCamioaneLista();
+            deseneazaGhene();
+            deseneazaRaportari();
+            deseneazaEvenimente();
+        }
+
+        let primaIncarcare = true;
+        let ruteInCurs = false;
+        const ora = () => new Date().toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+        async function actualizeaza(planNou) {
+            const [pubele, alerte, pozitii] = await Promise.all([
+                cere("GET", "/api/pubele"), cere("GET", "/api/alerte").catch(() => []), cere("GET", "/api/pozitii").catch(() => []),
             ]);
-            deseneazaPubele(p);
-            deseneazaDepozitari(alerte);
-            deseneazaCamioane(pozitii);
-            if (primaIncarcare && p.length) {
-                harta.fitBounds(p.map(x => [x.lat, x.lng ?? x.lon]), { padding: [40, 40] });
+            stare = { ...stare, pubele, alerte, pozitii };
+            if (planNou) stare.plan = planNou;
+            if (primaIncarcare && pubele.length) {
+                harta.fitBounds(pubele.map(x => [x.lat, x.lng]), { padding: [50, 50] });
                 primaIncarcare = false;
             }
+            deseneazaTot();
 
-            if (plan) {
-                deseneazaRute(plan);
-                areRute = true;
-            } else if (!ruteInCurs) {
+            if (!planNou && !ruteInCurs) {
                 ruteInCurs = true;
-                if (!areRute) seteazaStatus("Se calculează rutele de azi, poate dura până la un minut…");
+                if (!stare.plan) stareHarta("Se calculează rutele de azi…");
                 cere("GET", "/api/rute")
-                    .then(pl => {
-                        deseneazaRute(pl);
-                        areRute = true;
-                        seteazaStatus(`Actualizat la ${ora()}. Se reîmprospătează singur.`);
-                    })
-                    .catch(e => seteazaStatus(`Rutele nu s-au putut încărca (${e.message}). Reîncerc în câteva secunde.`, true))
+                    .then(pl => { stare.plan = pl; stareHarta(""); deseneazaTot(); })
+                    .catch(e => stareHarta(`Rutele nu s-au putut încărca (${e.message}). Reîncerc…`))
                     .finally(() => { ruteInCurs = false; });
             }
-            if (areRute) seteazaStatus(`Actualizat la ${ora()}. Se reîmprospătează singur.`);
+            seteazaStatus(`Live · actualizat la ${ora()}`);
         }
 
-        function seteazaStatus(text, eroare = false) {
-            const s = document.getElementById("status");
-            s.textContent = text;
-            s.classList.toggle("eroare", eroare);
-        }
-
-        const buton = document.getElementById("planifica");
+        const buton = $("#planifica");
         buton.onclick = async () => {
             buton.disabled = true;
-            seteazaStatus("Se calculează rutele, durează câteva secunde…");
+            stareHarta("Se calculează rutele optime…");
             try {
                 await actualizeaza(await cere("POST", "/api/rute/planifica"));
-                seteazaStatus("Rutele de azi sunt planificate.");
+                stareHarta("");
+                seteazaStatus(`Rute replanificate la ${ora()}`);
             } catch (e) {
-                seteazaStatus(`Rutele nu s-au putut calcula (${e.message}). Verifică dacă serverul de rutare rulează.`, true);
+                stareHarta(`Rutele nu s-au putut calcula (${e.message}).`);
             } finally {
                 buton.disabled = false;
             }
@@ -847,11 +1159,10 @@
 
         function porneste() {
             if (document.querySelector(".leaflet-popup")) return;   // nu inchidem popup-ul pe care il citeste cineva
-            actualizeaza().catch(e =>
-                seteazaStatus(`Nu primesc date de la server (${e.message}). Reîncerc în câteva secunde.`, true));
+            actualizeaza().catch(e => seteazaStatus(`Fără legătură cu serverul (${e.message}). Reîncerc…`, true));
         }
 
-        document.getElementById("azi").textContent = "Timișoara, " +
+        $("#azi").textContent = "Dispecerat Timișoara · " +
             new Date().toLocaleDateString("ro-RO", { weekday: "long", day: "numeric", month: "long" });
         porneste();
         setInterval(porneste, REIMPROSPATARE_MS);
