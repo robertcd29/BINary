@@ -676,6 +676,43 @@ h1, h2 { margin: 0; }
 .truck-arrow { width: 34px; height: 34px; filter: drop-shadow(0 2px 3px #0005); }
 .truck-arrow path { fill: var(--route); stroke: #fff; stroke-width: 2; stroke-linejoin: round; }
 
+/* ---------- navigatie pe tot ecranul: harta dedesubt, bara sus, oprirea jos pe fundal transparent ---------- */
+body.nav-active { overflow: hidden; }
+
+.driver.fullscreen .map-panel {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.driver.fullscreen .map-panel.navigating .map-viewport { height: 100%; min-height: 0; }
+
+.driver.fullscreen .nav-card {
+  position: fixed;
+  z-index: 1600;
+  bottom: 0;
+  left: 50%;
+  width: min(560px, 100%);
+  margin: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #ffffffb8;
+  border: 0;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -6px 20px #0000002e;
+  transform: translateX(-50%);
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+}
+
+.driver.fullscreen .nav-destination { padding: 12px 16px 4px; border-bottom: 0; }
+.driver.fullscreen .nav-destination small { color: var(--ink-2); }
+.driver.fullscreen .nav-actions { padding: 10px 16px 4px; }
+.driver.fullscreen .secondary-button,
+.driver.fullscreen .icon-button { background: #ffffffcc; }
+.driver.fullscreen .nav-footer { padding: 0 16px 8px; }
+
 /* ---------- bara de instructiuni de sus, ca la Waze ---------- */
 body.nav-active .appbar { display: none; }
 body.nav-active .content { padding-top: calc(var(--nav-bar-h, 100px) + 12px); padding-bottom: 12px; transition: padding-top .2s ease; }

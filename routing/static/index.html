@@ -690,6 +690,7 @@
 
     <script>
         const REIMPROSPATARE_MS = 5000;
+        const ASCUNDE_COLECTATE_MS = 7 * 60_000;   // raportarile colectate dispar din tab dupa 7 minute
         const CULORI = ["#2b59d9", "#7a4bc2", "#0e8c82", "#b5487a", "#5b6b1f", "#c46a1b"];
         const CAPACITATE_L = 8000;              // un camion, ca in motorul de rutare
         const L_PE_KM = 0.7;                    // camion de gunoi diesel: ~0,7 L motorina/km
@@ -1083,7 +1084,9 @@
         function deseneazaRaportari() {
             const lista = $("#l-raport");
             lista.replaceChildren();
-            const alerte = stare.alerte.filter(a => a.status !== "duplicat");
+            // cele colectate mai stau putin in lista (sa se vada ca s-au rezolvat), apoi dispar
+            const alerte = stare.alerte.filter(a => a.status !== "duplicat"
+                && !(a.status === "colectata" && Date.now() - new Date(a.inchisa ?? a.creata) > ASCUNDE_COLECTATE_MS));
             const deschise = alerte.filter(a => a.status !== "colectata").length;
             const c = $("#c-raport");
             c.textContent = deschise;

@@ -29,7 +29,7 @@ const SIM_STEP_M = 20           // simulare: cati metri inainteaza camionul la f
 const SIM_TICK_MS = 400
 const LOOK_AHEAD_M = 25         // directia de mers se ia spre un punct aflat atat de departe pe traseu
 const NAV_ZOOM = 17
-const TRUCK_SCREEN_Y = 0.72     // camionul sta la 72% din inaltimea hartii: vezi mai mult drum in fata
+const TRUCK_SCREEN_Y = 0.62     // camionul sta la 62% din inaltimea hartii: vezi drumul din fata, deasupra cardului de jos
 
 // ---------- geometrie ----------
 
@@ -385,7 +385,7 @@ export function NavCard({ n, onComplete }: {
 const POS_SMOOTH_S = 0.45       // cat de repede ajunge camionul desenat la pozitia GPS (secunde)
 const HEADING_SMOOTH_S = 0.6    // cat de lin se roteste harta la viraje
 const NORTH_SMOOTH_S = 0.4      // revenirea la nordul in sus
-const TILT_TRUCK_FROM_BOTTOM = 0.2  // vederea 3D: camionul la 20% din inaltime, de jos
+const TILT_TRUCK_FROM_BOTTOM = 0.34 // vederea 3D: camionul la 34% din inaltime, de jos (deasupra cardului cu oprirea)
 const NAV_PANE = 'navigatie'
 
 const TRUCK_ICON = L.divIcon({

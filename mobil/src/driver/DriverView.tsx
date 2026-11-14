@@ -58,7 +58,8 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
   const color = TRUCK_COLORS[Number(truckId) % TRUCK_COLORS.length]
 
   return (
-    <div className="screen screen-pad driver">
+    // in timpul navigatiei harta ocupa tot ecranul; sus ramane bara cu instructiunea, jos urmatoarea oprire
+    <div className={`screen screen-pad driver${n.started ? ' fullscreen' : ''}`}>
       {!n.started && (
         <div className="route-strip">
           <div><strong>{d.route ? d.route.opriri.filter(o => !o.facuta).length : '–'}</strong><span>opriri rămase</span></div>
