@@ -595,7 +595,7 @@ CAPTURES.mkdir(exist_ok=True)
 STATUS_APLICATIE = {"assigned": "pe_ruta", "duplicat": "duplicat"}
 
 
-@router.post("/rapoarte", dependencies=[Depends(cere_rol("cetatean", "sofer", "admin"))])
+@router.post("/rapoarte")  # deschis si vizitatorilor: poza trece oricum prin filtrul Gemini
 def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
     """Gemini verifica poza; daca e gunoi, intra ca orice alerta (duplicate, inserare in ruta)."""
     try:
@@ -744,7 +744,7 @@ def compat_trashes():
         return [{k: r[k] for k in ("id", "lat", "lng", "umplere")} for r in _trashes(conn)]
 
 
-@compat.post("/rapoarte", dependencies=[Depends(cere_rol("cetatean", "sofer", "admin"))])
+@compat.post("/rapoarte")  # deschis si vizitatorilor: poza trece oricum prin filtrul Gemini
 def compat_rapoarte(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...),
                     descriere: str = Form("")):
     """Aplicatia asteapta {id, status}; filtrul Gemini si alertele sunt cele din /api/rapoarte."""

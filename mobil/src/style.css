@@ -769,3 +769,5 @@ body.nav-active .content { padding-top: calc(var(--nav-bar-h, 100px) + 12px); pa
 .login-btn { min-width: 220px; height: 48px; border: 0; border-radius: 12px; color: #fff; background: var(--accent); font-weight: 700; font-size: 16px; }
 .login-err { color: var(--full) !important; }
 .logout { display: grid; place-items: center; width: 36px; height: 36px; margin-left: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--muted); }
+
+.login-guest { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 15px; padding: 8px; text-decoration: underline; }

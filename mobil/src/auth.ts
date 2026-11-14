@@ -5,7 +5,13 @@ import { createAuth0Client, type Auth0Client } from '@auth0/auth0-spa-js'
 const ROLURI = 'https://binary-api/roles'   // campul pus in token de Action-ul "Roluri in token"
 let client: Auth0Client | null = null
 
-export type Sesiune = { activ: boolean; logat: boolean; email?: string; roluri: string[]; eroare?: string }
+export type Sesiune = { activ: boolean; logat: boolean; vizitator?: boolean; email?: string; roluri: string[]; eroare?: string }
+
+// vizitator = cetatean fara cont: poate raporta, dar nu are acces la partea de sofer
+const CHEIE_VIZITATOR = 'binary-vizitator'
+const esteVizitator = () => { try { return localStorage.getItem(CHEIE_VIZITATOR) === '1' } catch { return false } }
+export function intraCaVizitator() { try { localStorage.setItem(CHEIE_VIZITATOR, '1') } catch { /* fara storage */ } location.reload() }
+function uitaVizitator() { try { localStorage.removeItem(CHEIE_VIZITATOR) } catch { /* fara storage */ } }
 
 export async function pornesteAuth(): Promise<Sesiune> {
   const cfg = await fetch('/api/auth-config').then(r => r.json()).catch(() => ({ activ: false }))
@@ -18,17 +24,23 @@ export async function pornesteAuth(): Promise<Sesiune> {
     authorizationParams: { redirect_uri: location.origin + '/', audience: cfg.audience },
   })
   const q = new URLSearchParams(location.search)
-  if (q.has('code') && q.has('state')) {
+  if (q.has('state')) {
     try { await client.handleRedirectCallback() } catch { /* link de login vechi: cerem login din nou */ }
     history.replaceState({}, '', location.pathname)
   }
-  if (!await client.isAuthenticated()) return { activ: true, logat: false, roluri: [] }
+  if (!await client.isAuthenticated()) {
+    if (esteVizitator()) return { activ: true, logat: true, vizitator: true, roluri: ['cetatean'] }
+    return { activ: true, logat: false, roluri: [] }
+  }
   const date = await client.getIdTokenClaims()
   return { activ: true, logat: true, email: (date?.email || date?.name) as string, roluri: (date?.[ROLURI] as string[]) || [] }
 }
 
-export const intra = () => client?.loginWithRedirect()
-export const iesi = () => client?.logout({ logoutParams: { returnTo: location.origin + '/' } })
+export const intra = () => { uitaVizitator(); client?.loginWithRedirect() }
+export function iesi() {
+  if (esteVizitator()) { uitaVizitator(); location.reload(); return }
+  client?.logout({ logoutParams: { returnTo: location.origin + '/' } })
+}
 
 /** Antetul cu tokenul, pentru cererile care schimba ceva pe server (fara login pornit: nimic). */
 export async function antetAuth(): Promise<Record<string, string>> {

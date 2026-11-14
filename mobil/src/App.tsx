@@ -8,7 +8,7 @@ import MyReports from './citizen/MyReports'
 import { DriverNav, DriverStops, TRUCK_COLORS, useDriver } from './driver/DriverView'
 import { NavTopBar } from './Navigatie'
 import { useGeolocation } from './lib'
-import { iesi, intra, pornesteAuth, type Sesiune } from './auth'
+import { iesi, intra, intraCaVizitator, pornesteAuth, type Sesiune } from './auth'
 
 type CitizenTab = 'harta' | 'raport' | 'rapoarte'
 type DriverTab = 'navigatie' | 'opriri'
@@ -68,7 +68,10 @@ function EcranLogin({ s }: { s: Sesiune }) {
       <h1>BIN<b>ary</b></h1>
       <p>Raportează depozitările de gunoi din Timișoara. Intră în cont ca să trimiți poze; șoferii intră cu contul primit de la dispecerat.</p>
       {s.eroare ? <p className="login-err">{s.eroare}</p>
-        : <button className="btn-primary login-btn" onClick={() => intra()}>Intră în cont</button>}
+        : <>
+          <button className="btn-primary login-btn" onClick={() => intra()}>Intră în cont</button>
+          <button className="login-guest" onClick={() => intraCaVizitator()}>Continuă fără cont</button>
+        </>}
     </div>
   )
 }
@@ -114,7 +117,8 @@ export default function App() {
           </div>
         )}
         {sesiune.activ && (
-          <button className="logout" onClick={() => iesi()} aria-label={`Ieși din cont (${sesiune.email})`} title={sesiune.email}>
+          <button className="logout" onClick={() => iesi()} aria-label={sesiune.vizitator ? 'Intră în cont' : `Ieși din cont (${sesiune.email})`}
+            title={sesiune.vizitator ? 'Ești vizitator. Intră în cont' : sesiune.email}>
             <LogOut size={18} />
           </button>
         )}

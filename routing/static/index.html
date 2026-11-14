@@ -742,8 +742,10 @@
                 domain: cfg.domain, clientId: cfg.client_id, cacheLocation: "localstorage", useRefreshTokens: true,
                 authorizationParams: { redirect_uri: location.origin + "/dispecer/", audience: cfg.audience },
             });
-            if (location.search.includes("code=") && location.search.includes("state=")) {
-                await auth0Client.handleRedirectCallback();
+            if (location.search.includes("state=")) {
+                // "invalid state" = un link de login vechi sau inceput pe alt link: il ignoram si reluam loginul
+                try { await auth0Client.handleRedirectCallback(); }
+                catch (e) { console.warn("login reluat:", e.message); }
                 history.replaceState({}, "", location.pathname);
             }
             if (!await auth0Client.isAuthenticated()) {
