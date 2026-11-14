@@ -498,20 +498,26 @@ def ruta_camion(camion: int):
             raise HTTPException(404, f"Camionul {camion} nu are ruta azi")
         pubele = {b["id"]: b for b in _state["bins"] or []}
         alerte = {a["id"]: a for a in plan["alerts"]}
-        opriri = []
-        for sid in ruta["stops"]:
-            if sid == "depot":
-                continue
-            if sid in alerte and alerte[sid].get("kind") == "alert":
-                a = alerte[sid]
-                opriri.append({"id": sid, "tip": "depozitare", "lat": a["lat"], "lng": a["lng"],
-                               "facuta": sid in _state["facute"]})
-            elif sid in pubele:
-                b = pubele[sid]
-                opriri.append({"id": sid, "tip": "pubela", "lat": b["lat"], "lng": b["lng"],
-                               "umplere": b["umplere"], "facuta": sid in _state["facute"]})
-        return {"camion": camion, "distanta_m": ruta["distance_m"], "opriri": opriri,
-                "traseu": ruta["geometry"]}
+        stops, geometrie, distanta = list(ruta["stops"]), ruta["geometry"], ruta["distance_m"]
+        incarcare, facute = ruta["load_l"], set(_state["facute"])
+    with _connect() as conn:            # numele si adresa ghenelor, din tabela lui Robert
+        info = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
+            if _has_trashes(conn) else {}
+    opriri = []
+    for sid in stops:
+        if sid == "depot":
+            continue
+        if sid in alerte and alerte[sid].get("kind") == "alert":
+            a = alerte[sid]
+            opriri.append({"id": sid, "tip": "depozitare", "lat": a["lat"], "lng": a["lng"],
+                           "nume": "Depozitare ilegală", "adresa": None, "facuta": sid in facute})
+        elif sid in pubele:
+            b, r = pubele[sid], info.get(sid, {})
+            opriri.append({"id": sid, "tip": "pubela", "lat": b["lat"], "lng": b["lng"],
+                           "nume": r.get("nume") or sid, "adresa": r.get("adresa"),
+                           "umplere": b["umplere"], "facuta": sid in facute})
+    return {"camion": camion, "distanta_m": distanta, "incarcare_l": incarcare, "opriri": opriri,
+            "traseu": geometrie}
 
 
 @router.get("/navigatie/{camion}")
