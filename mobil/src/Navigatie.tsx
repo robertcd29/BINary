@@ -23,6 +23,9 @@ const OFF_ROUTE_M = 50          // mai departe de atat de traseu = a luat-o pe a
 const OFF_ROUTE_FOR_MS = 4000   // ...si a ramas departe atata timp (un salt de GPS nu recalculeaza)
 const BAD_GPS_M = 50            // o pozitie cu precizie mai slaba de atat nu declanseaza recalcularea
 const PRE_ANNOUNCE_M = 450      // pe drumurile lungi, manevra se anunta o data si de la aceasta distanta
+const MOVE_HEADING_M = 8        // directia de mers reala: din pozitii GPS aflate la cel putin atatia metri
+const HEADING_FRESH_MS = 20_000 // ...si nu mai vechi de atat (oprit la semafor de mult = nu mai stim sigur)
+const DEPOT_STOP_MS = 4000      // la depou: navigatia se opreste singura dupa anuntul vocal
 const RESUME_MAX_MS = 4 * 3600_000 // navigatia pornita se reia singura dupa o reincarcare a paginii, pana la 4 ore
 const REROUTE_EVERY_MS = 10_000 // nu recalculam mai des de atat
 const ARRIVED_M = 30            // la 30 m de oprire consideram ca a ajuns
@@ -191,11 +194,26 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   positionRef.current = position
   const lastReroute = useRef(0)
 
+  // directia reala de mers, din ultimele pozitii (nu din traseu: cand a iesit de pe traseu, traseul minte)
+  const moveAnchor = useRef<Coordinates | null>(null)
+  const moveHeading = useRef<{ deg: number; at: number } | null>(null)
+  useEffect(() => {
+    if (!position) return
+    const a = moveAnchor.current
+    if (!a) { moveAnchor.current = position; return }
+    if (meters([a.lat, a.lng], [position.lat, position.lng]) >= MOVE_HEADING_M) {
+      moveHeading.current = { deg: bearing(a, position), at: Date.now() }
+      moveAnchor.current = position
+    }
+  }, [position])
+
   const hasNav = useRef(false)
   const refresh = useCallback(async (from?: Coordinates | null) => {
     setLoading(true)
     try {
-      setNav(await getNavigation(truckId, from ?? positionRef.current))
+      const h = moveHeading.current
+      const heading = h && Date.now() - h.at < HEADING_FRESH_MS ? h.deg : null
+      setNav(await getNavigation(truckId, from ?? positionRef.current, heading))
       hasNav.current = true
       setError('')
     } catch (e) {
@@ -299,6 +317,18 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     }
   }, [started, voice, arrived, stop])
 
+  // inapoi la depou, cu toate opririle facute: navigatia (si simularea) se opresc singure
+  const atDepot = started && arrived && stop?.tip === 'depou'
+  useEffect(() => {
+    if (!atDepot) return
+    const id = setTimeout(() => {
+      resumePending.current = false
+      setSimulating(false)
+      setStarted(false)
+    }, DEPOT_STOP_MS)
+    return () => clearTimeout(id)
+  }, [atDepot])
+
   // simulare pentru demo: camionul merge singur pe traseu, iar dispecerul il vede pe dashboard
   const simDist = useRef(0)
   useEffect(() => { simDist.current = 0 }, [leg])
@@ -400,6 +430,23 @@ export function NavCard({ n, onComplete }: {
   }
 
   const ramase = n.nav.opriri.filter(o => o.tip !== 'depou').length
+
+  // toate opririle facute si camionul e la depou: ziua s-a terminat, nu mai e nimic de pornit
+  if (!n.started && ramase === 0 && n.remaining <= ARRIVED_M * 2) {
+    return (
+      <section className="panel nav-card preview">
+        <span className="sheet-handle" aria-hidden="true" />
+        <div className="nav-destination">
+          <span className="dest-badge depou" aria-hidden="true"><Flag size={20} /></span>
+          <div>
+            <small>Toate opririle sunt făcute</small>
+            <strong>Traseul de azi e gata</strong>
+            <small>Camionul e la depou</small>
+          </div>
+        </div>
+      </section>
+    )
+  }
 
   async function done() {
     if (!n.stop) return

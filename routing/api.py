@@ -863,10 +863,12 @@ def ruta_camion(camion: int):
 
 
 @router.get("/navigatie/{camion}")
-def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
+def navigatie(camion: int, lat: float | None = None, lng: float | None = None, directie: float | None = None):
     """Ca un GPS: drumul pas cu pas spre fiecare oprire ramasa, apoi inapoi la depou.
 
     lat/lng = pozitia curenta a soferului; fara ele, pornim de la ultima oprire facuta (sau depou).
+    directie = incotro merge camionul (grade, 0 = nord), optional: drumul porneste pe sensul pe care
+    chiar merge, nu pe cel opus (altfel ar trebui sa se intoarca).
     etape[i] duce la opriri[i]; ultima etapa duce la depou.
     """
     with _lock:
@@ -882,11 +884,12 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
         alerte = {a["id"]: a for a in plan["alerts"]}
         facute = set(_state["facute"])
         stops = [s for s in ruta["stops"] if s != "depot"]
+        locuri = dict(plan.get("_stops", {}))   # unde opreste camionul la fiecare oprire (cu sensul strazii)
     info = _nume_ghene()
     info = {**SIM, **info}              # ghenele simulate au numele strazii din sim_bins.json
 
     depou = (engine.DEPOT["lat"], engine.DEPOT["lng"])
-    opriri, start = [], depou
+    opriri, start, start_loc = [], depou, locuri.get("depot")
     for sid in stops:
         if sid in alerte and alerte[sid].get("kind") == "alert":
             a = alerte[sid]
@@ -899,18 +902,20 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
         else:
             continue
         if sid in facute:
-            start = (o["lat"], o["lng"])     # ultima oprire facuta: de aici pleaca soferul
+            start, start_loc = (o["lat"], o["lng"]), locuri.get(sid)   # ultima oprire facuta: de aici pleaca
         else:
             opriri.append(o)
     if lat is not None and lng is not None:
-        start = (lat, lng)
+        start, start_loc = (lat, lng), None
     opriri.append({"id": "depot", "tip": "depou", "nume": "depou", "adresa": None,
                    "lat": depou[0], "lng": depou[1]})
 
-    etape, prev = [], start
+    etape, prev, prev_loc = [], start, start_loc
     for o in opriri:
         try:
-            etape.append(engine.etapa_navigatie(prev, (o["lat"], o["lng"]), o["nume"]))
+            etape.append(engine.etapa_navigatie(prev, (o["lat"], o["lng"]), o["nume"], start_oprire=prev_loc,
+                                                dest_oprire=locuri.get(o["id"]),
+                                                directie=directie if prev_loc is None else None))
         except Exception as e:
             # o oprire fara drum pe harta nu strica toata navigatia: etapa ei e o linie dreapta
             print("rutare: etapa de navigatie a esuat:", o["id"], e)
@@ -920,7 +925,7 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
                  "lat": prev[0], "lng": prev[1], "distanta_m": d},
                 {"tip": "sosire", "text": f"Ai ajuns la {o['nume']}", "strada": o["nume"], "la_m": d,
                  "lat": o["lat"], "lng": o["lng"], "distanta_m": 0}]})
-        prev = (o["lat"], o["lng"])
+        prev, prev_loc = (o["lat"], o["lng"]), locuri.get(o["id"])
     return {"camion": camion, "opriri": opriri, "etape": etape}
 
 

@@ -182,7 +182,8 @@ export type Navigation = {
   etape: NavLeg[]
 }
 
-export async function getNavigation(truckId: string, from?: Coordinates | null): Promise<Navigation> {
-  const q = from ? `?lat=${from.lat}&lng=${from.lng}` : ''
+export async function getNavigation(truckId: string, from?: Coordinates | null, heading?: number | null): Promise<Navigation> {
+  // heading = incotro merge camionul: serverul porneste drumul pe sensul pe care chiar merge
+  const q = from ? `?lat=${from.lat}&lng=${from.lng}${heading != null ? `&directie=${Math.round(heading)}` : ''}` : ''
   return apiRequest<Navigation>(`/api/navigatie/${encodeURIComponent(truckId)}${q}`)
 }
