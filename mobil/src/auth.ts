@@ -46,13 +46,17 @@ export function iesi() {
 }
 
 /** Antetul cu tokenul, pentru cererile care schimba ceva pe server (fara login pornit: nimic). */
-export async function antetAuth(): Promise<Record<string, string>> {
+export async function antetAuth(interactiv = true): Promise<Record<string, string>> {
   // vizitatorul (fara cont) trimite cererile fara token: serverul accepta raportarile si asa
   if (!client || esteVizitator() || !await client.isAuthenticated()) return {}
   try {
     return { Authorization: `Bearer ${await client.getTokenSilently()}` }
-  } catch {
-    await client.loginWithRedirect()     // sesiune expirata la un utilizator logat: login din nou
+  } catch (e) {
+    // login din nou doar cand sesiunea chiar a expirat si doar la o actiune a utilizatorului;
+    // o cadere de retea sau o cerere trimisa singura (pozitia GPS) nu il scoate din aplicatie
+    const cod = (e as { error?: string })?.error
+    const expirata = cod === 'login_required' || cod === 'invalid_grant' || cod === 'missing_refresh_token' || cod === 'consent_required'
+    if (interactiv && expirata) await client.loginWithRedirect()
     return {}
   }
 }

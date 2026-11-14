@@ -211,6 +211,51 @@ _VIRAJ = {"inainte": "Continuă înainte", "usor-dreapta": "Virează ușor la dr
           "stanga": "Virează la stânga", "intoarcere": "Întoarce-te"}
 
 
+# ---------- sensuri giratorii ----------
+
+# strazile care fac parte dintr-un sens giratoriu (OpenStreetMap: junction=roundabout / circular)
+_GIRATORIU = {(u, v) for u, v, d in _G.edges(data=True) if str(d.get("junction")) in ("roundabout", "circular")}
+# centrul fiecarui giratoriu (media nodurilor lui legate intre ele), pentru desenul iesirii
+_CENTRU_GIRATORIU = {}
+_vecini = {}
+for _u, _v in _GIRATORIU:
+    _vecini.setdefault(_u, set()).add(_v)
+    _vecini.setdefault(_v, set()).add(_u)
+for _n in _vecini:
+    if _n in _CENTRU_GIRATORIU:
+        continue
+    _comp, _stiva = {_n}, [_n]
+    while _stiva:
+        for _w in _vecini[_stiva.pop()]:
+            if _w not in _comp:
+                _comp.add(_w)
+                _stiva.append(_w)
+    _c = (float(np.mean([_G.nodes[k]["y"] for k in _comp])), float(np.mean([_G.nodes[k]["x"] for k in _comp])))
+    for _k in _comp:
+        _CENTRU_GIRATORIU[_k] = _c
+del _vecini
+
+_ORDINAL = {1: "prima", 2: "a doua", 3: "a treia", 4: "a patra", 5: "a cincea", 6: "a șasea",
+            7: "a șaptea", 8: "a opta"}
+
+
+def _iesiri_numarate(muchii):
+    """A cata iesire ia soferul: numaram nodurile din giratoriu prin care trece (dupa intrare) din
+    care pleaca o strada care iese din giratoriu. Nodurile unde strazile doar intra nu se numara."""
+    n = 0
+    for _, v in muchii:
+        if any((v, w) not in _GIRATORIU for w in _G.successors(v)):
+            n += 1
+    return n
+
+
+def _text_giratoriu(n, strada):
+    pe = f" pe {strada}" if strada and strada != "strada fără nume" else ""
+    if not n:
+        return f"Intră în sensul giratoriu{pe}"
+    return f"La sensul giratoriu, ia {_ORDINAL.get(n, f'ieșirea {n}')}{' ieșire' if n in _ORDINAL else ''}{pe}"
+
+
 def _viraj(inainte, dupa):
     d = (dupa - inainte + 540) % 360 - 180        # -180..180, pozitiv = spre dreapta
     if abs(d) < 25:
@@ -324,40 +369,71 @@ def etapa_navigatie(start, dest, nume_dest):
     if not parts:
         raise ValueError("nu exista drum pe harta intre cele doua puncte")
 
-    # bucati de drum grupate pe strazi: fiecare schimbare de strada e o manevra
-    grupuri = []                                  # [nume, [puncte], ultima strada (u, v)]
+    # bucati de drum grupate pe strazi: fiecare schimbare de strada e o manevra.
+    # Un sens giratoriu e un singur grup (oricate bucati si nume ar avea), cu muchiile lui pastrate
+    # ca sa numaram iesirile.
+    grupuri = []                                  # [nume, [puncte], ultima strada (u, v), giratoriu, muchii]
     for pts, name, edge in parts:
         if len(pts) < 2:                          # bucata de lungime zero
             continue
-        if grupuri and grupuri[-1][0] == name:
-            grupuri[-1][1].extend(pts[1:])
-            grupuri[-1][2] = edge
+        rb = edge in _GIRATORIU
+        if grupuri and grupuri[-1][3] == rb and (rb or grupuri[-1][0] == name):
+            g = grupuri[-1]
+            g[1].extend(pts[1:])
+            g[2] = edge
+            g[4].append(edge)
+            if rb and g[0] == "strada fără nume":
+                g[0] = name
         else:
-            grupuri.append([name, pts, edge])
-    # bucatile scurte fara nume (benzi de viraj, intersectii) nu sunt manevre de anuntat
+            grupuri.append([name, list(pts), edge, rb, [edge]])
+    # bucatile scurte fara nume (benzi de viraj, intersectii) nu sunt manevre de anuntat;
+    # giratoriile raman separate, chiar daca sunt mici
     curat = []
-    for name, pts, edge in grupuri:
+    for name, pts, edge, rb, muchii in grupuri:
         scurt = sum(_m(p, q) for p, q in zip(pts, pts[1:])) < 40
-        if curat and (scurt and name == "strada fără nume" or curat[-1][0] == name):
+        if curat and not rb and not curat[-1][3] and (scurt and name == "strada fără nume" or curat[-1][0] == name):
             curat[-1][1].extend(pts[1:])
             curat[-1][2] = edge
         else:
-            curat.append([name, pts, edge])
+            curat.append([name, pts, edge, rb, muchii])
     grupuri = curat
 
     coords = [list(start)]
     pasi = []
-    for i, (name, pts, _) in enumerate(grupuri):
-        benzi = None
+    for i, (name, pts, _, rb, muchii) in enumerate(grupuri):
+        benzi, extra = None, {}
+        urm = grupuri[i + 1] if i + 1 < len(grupuri) else None
         if i == 0:
-            tip, text = "start", f"Pornește pe {name}"
+            tip, text = "start", ("Pornește prin sensul giratoriu" if rb else f"Pornește pe {name}")
+        elif rb:
+            # intrarea in giratoriu: o singura instructiune, cu numarul iesirii si strada pe care iese
+            n = _iesiri_numarate(muchii) if urm else 0
+            strada_iesire = urm[0] if urm else None
+            tip, text = "giratoriu", _text_giratoriu(n, strada_iesire)
+            name = strada_iesire if strada_iesire and strada_iesire != "strada fără nume" else (
+                name if name != "strada fără nume" else "sensul giratoriu")
+            extra = {"iesire": n}
+            # in ce directie iese, fata de cum a intrat (pentru desenul de pe ecran)
+            # in ce directie iese, pentru desen: cat din cerc parcurge (in sens invers acelor de ceasornic)
+            # de la intrare la iesire, vazut din centrul giratoriului; 0 = drept inainte, + = dreapta
+            centru = _CENTRU_GIRATORIU.get(muchii[0][1]) or _CENTRU_GIRATORIU.get(muchii[0][0])
+            if urm and centru:
+                arc = (_bearing(centru, pts[0]) - _bearing(centru, pts[-1])) % 360
+                extra["unghi"] = round(180 - arc)
+            else:
+                extra["unghi"] = 0
+        elif grupuri[i - 1][3]:
+            # iesirea din giratoriu: anuntata cand e aproape, ca soferul sa nu o rateze
+            n = _iesiri_numarate(grupuri[i - 1][4])
+            tip, text = "iesire-giratoriu", f"Ieși din sensul giratoriu pe {name}"
+            extra = {"iesire": n}
         else:
             prev = grupuri[i - 1][1]
             tip = _viraj(_bearing(prev[-2], prev[-1]), _bearing(pts[0], pts[1]))
             text = f"{_VIRAJ[tip]} pe {name}"
             benzi = _benzi(*grupuri[i - 1][2], tip)
         la = sum(_m(p, q) for p, q in zip(coords, coords[1:])) + _m(coords[-1], pts[0])
-        pas = {"tip": tip, "text": text, "strada": name, "la_m": round(la), "lat": pts[0][0], "lng": pts[0][1]}
+        pas = {"tip": tip, "text": text, "strada": name, "la_m": round(la), "lat": pts[0][0], "lng": pts[0][1], **extra}
         if benzi:
             pas.update(benzi)
         pasi.append(pas)

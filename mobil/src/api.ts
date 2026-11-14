@@ -20,9 +20,11 @@ export const isTransient = (e: unknown) => e instanceof ApiError && (e.status ==
 // ~30 s in total: cat dureaza o repornire a serverului dupa un deploy (Caddy da 502 intre timp)
 const RETRY_DELAYS_MS = [700, 1500, 3000, 5000, 8000, 12000]
 
-export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  // cererile care schimba ceva (POST) merg cu tokenul de login; citirile raman publice
-  const auth = init?.method && init.method !== 'GET' ? await antetAuth() : {}
+export async function apiRequest<T>(path: string, init?: RequestInit, background = false): Promise<T> {
+  // cererile care schimba ceva (POST) merg cu tokenul de login; citirile raman publice.
+  // background = trimisa singura (pozitia GPS): daca tokenul nu se poate reinnoi, NU plecam la login
+  // (asta scotea soferul din navigatie); cererea pleaca fara token si incercam din nou peste 2 s
+  const auth = init?.method && init.method !== 'GET' ? await antetAuth(!background) : {}
   const isRead = !init?.method || init.method === 'GET'
   for (let attempt = 0; ; attempt++) {
     let response: Response
@@ -128,7 +130,7 @@ export async function sendDriverPosition(truckId: string, position: Coordinates)
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ camion: Number(truckId), lat: position.lat, lng: position.lng })
-  })
+  }, true)
 }
 
 export const markStopEmptied = (stopId: string) =>
@@ -141,6 +143,7 @@ export const markAlertCollected = (alertId: string) =>
 
 export type NavStep = {
   tip: 'start' | 'inainte' | 'usor-dreapta' | 'dreapta' | 'usor-stanga' | 'stanga' | 'intoarcere' | 'sosire'
+    | 'giratoriu' | 'iesire-giratoriu'
   text: string
   strada: string
   la_m: number        // unde incepe manevra, in metri de la inceputul etapei
@@ -151,6 +154,8 @@ export type NavStep = {
   benzi?: { directii: LaneDir[]; buna: boolean }[]
   benzi_estimat?: boolean   // fara marcaje in OpenStreetMap: dupa regula generala din codul rutier
   benzi_text?: string
+  iesire?: number     // sens giratoriu: a cata iesire (0 = necunoscut)
+  unghi?: number      // sens giratoriu: directia iesirii fata de intrare, in grade (pozitiv = dreapta)
 }
 
 export type LaneDir = 'reverse' | 'sharp_left' | 'left' | 'slight_left' | 'through' | 'slight_right' | 'right' | 'sharp_right'

@@ -20,6 +20,10 @@ import {
 } from './api'
 
 const OFF_ROUTE_M = 50          // mai departe de atat de traseu = a luat-o pe alt drum
+const OFF_ROUTE_FOR_MS = 4000   // ...si a ramas departe atata timp (un salt de GPS nu recalculeaza)
+const BAD_GPS_M = 50            // o pozitie cu precizie mai slaba de atat nu declanseaza recalcularea
+const PRE_ANNOUNCE_M = 450      // pe drumurile lungi, manevra se anunta o data si de la aceasta distanta
+const RESUME_MAX_MS = 4 * 3600_000 // navigatia pornita se reia singura dupa o reincarcare a paginii, pana la 4 ore
 const REROUTE_EVERY_MS = 10_000 // nu recalculam mai des de atat
 const ARRIVED_M = 30            // la 30 m de oprire consideram ca a ajuns
 const ANNOUNCE_M = 150          // virajul se anunta cu vocea de la aceasta distanta
@@ -99,8 +103,33 @@ function inDistance(step: NavStep, m: number) {
   return `În ${formatDistance(m)}, ${step.text.charAt(0).toLowerCase()}${step.text.slice(1)}`
 }
 
-function ManeuverIcon({ tip, size = 34 }: { tip: NavStep['tip']; size?: number }) {
+/** Sensul giratoriu vazut de sus, ca pe indicator: intrarea jos, se merge in sens invers acelor de
+ *  ceasornic (ca in Romania), iar sageata iese pe directia iesirii; numarul iesirii in mijloc. */
+function RoundaboutIcon({ iesire, unghi = 0, size }: { iesire?: number; unghi?: number; size: number }) {
+  const c = 12, r = 5.2, R = 11.2
+  const at = (deg: number, rad: number) => [c + rad * Math.sin((deg * Math.PI) / 180), c - rad * Math.cos((deg * Math.PI) / 180)]
+  // unghi = 180 - cat din cerc parcurge; limitat ca o iesire imediata sau o intoarcere sa se vada clar
+  const a = Math.max(-170, Math.min(135, unghi))
+  const sweep = 180 - a                                        // cat din cerc parcurge, in grade
+  const [qx, qy] = at(a, r)
+  const [ox, oy] = at(a, R - 1.5)
+  const head = (d: number) => at(a, R - 1.5).map((v, i) => v + 4 * [Math.sin(((a + d) * Math.PI) / 180), -Math.cos(((a + d) * Math.PI) / 180)][i])
+  const [h1x, h1y] = head(145), [h2x, h2y] = head(-145)
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx={c} cy={c} r={r} strokeWidth="1.6" opacity="0.4" />
+      <path d={`M${c} 23V${c + r}`} strokeWidth="2.4" />
+      <path d={`M${c} ${c + r}A${r} ${r} 0 ${sweep > 180 ? 1 : 0} 0 ${qx.toFixed(2)} ${qy.toFixed(2)}`} strokeWidth="2.4" />
+      <path d={`M${qx.toFixed(2)} ${qy.toFixed(2)}L${ox.toFixed(2)} ${oy.toFixed(2)}M${h1x.toFixed(2)} ${h1y.toFixed(2)}L${ox.toFixed(2)} ${oy.toFixed(2)}L${h2x.toFixed(2)} ${h2y.toFixed(2)}`} strokeWidth="2.4" />
+      {!!iesire && <text x={c} y={c + 2.3} textAnchor="middle" fontSize="6.5" fontWeight="800" fill="currentColor" stroke="none">{iesire}</text>}
+    </svg>
+  )
+}
+
+function ManeuverIcon({ tip, size = 34, step }: { tip: NavStep['tip']; size?: number; step?: NavStep | null }) {
   switch (tip) {
+    case 'giratoriu':
+    case 'iesire-giratoriu': return <RoundaboutIcon iesire={step?.iesire} unghi={step?.unghi} size={size} />
     case 'dreapta': return <CornerUpRight size={size} />
     case 'stanga': return <CornerUpLeft size={size} />
     case 'usor-dreapta': return <ArrowUpRight size={size} />
@@ -125,18 +154,30 @@ export function speak(text: string) {
 
 export type NavState = ReturnType<typeof useNavigation>
 
-export function useNavigation(truckId: string, gps: Coordinates | null, enabled: boolean) {
+type SavedNav = { started: boolean; voice: boolean; viewMode: ViewMode; at: number }
+const navKey = (truckId: string) => `binary.navigatie.${truckId}`
+function loadSaved(truckId: string): SavedNav | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(navKey(truckId)) || 'null') as SavedNav | null
+    return v && Date.now() - v.at < RESUME_MAX_MS ? v : null
+  } catch { return null }
+}
+
+export function useNavigation(truckId: string, gps: Coordinates | null, enabled: boolean, accuracy: number | null = null) {
+  // navigatia pornita e tinuta minte pe telefon: daca pagina se reincarca (ecran stins, telefonul
+  // inchide tab-ul din fundal, login reinnoit) soferul revine direct in navigatie
+  const [saved] = useState(() => loadSaved(truckId))
   const [nav, setNav] = useState<Navigation | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [started, setStarted] = useState(false)
-  const [voice, setVoice] = useState(true)
+  const [voice, setVoice] = useState(saved?.voice ?? true)
   const [follow, setFollow] = useState(true)
   const [simulating, setSimulating] = useState(false)
   const [simPos, setSimPos] = useState<Coordinates | null>(null)
 
   // 3d = inclinata si rotita ca la Waze, 2d = rotita pe directia de mers, nord = nordul in sus
-  const [viewMode, setViewMode] = useState<ViewMode>('3d')
+  const [viewMode, setViewMode] = useState<ViewMode>(saved?.viewMode ?? '3d')
   const lastHeading = useRef(0)
 
   const position = simulating ? simPos : gps
@@ -152,8 +193,9 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
       hasNav.current = true
       setError('')
     } catch (e) {
-      // serverul a cazut cateva secunde (ex. 502 de la tunel): soferul ramane pe navigatia pe care o are
+      // serverul a cazut cateva secunde (ex. 502 la un deploy): soferul ramane pe navigatia pe care o are
       if (hasNav.current && isTransient(e)) return
+      // alta eroare: cu o navigatie deja pe ecran, ea ramane, iar mesajul apare mic in card
       setError(e instanceof Error ? e.message : 'Nu s-a putut calcula navigația.')
     } finally {
       setLoading(false)
@@ -207,13 +249,23 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
 
   // e departe de traseu (a luat-o pe alt drum, sau GPS-ul a aparut abia dupa calcul):
   // recalculam de unde e acum
+  const offSince = useRef<number | null>(null)
   useEffect(() => {
-    if (!position || !leg || progress.off < OFF_ROUTE_M) return
+    if (!position || !leg) return
+    const badGps = !simulating && accuracy !== null && accuracy > BAD_GPS_M
+    if (progress.off < OFF_ROUTE_M || badGps) {
+      if (progress.off < OFF_ROUTE_M) offSince.current = null
+      return
+    }
+    // doar daca a ramas departe de traseu cateva secunde (nu la un salt de GPS intre blocuri)
+    if (offSince.current === null) offSince.current = Date.now()
+    if (started && Date.now() - offSince.current < OFF_ROUTE_FOR_MS) return
     if (Date.now() - lastReroute.current < REROUTE_EVERY_MS) return
     lastReroute.current = Date.now()
+    offSince.current = null
     if (started && voice) speak('Recalculez traseul')
     refresh(position)
-  }, [started, position, leg, progress.off, voice, refresh])
+  }, [started, position, leg, progress.off, voice, refresh, accuracy, simulating])
 
   // vocea: fiecare manevra se anunta o data cand se apropie, iar sosirea o data
   const announced = useRef(new Set<string>())
@@ -221,14 +273,19 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   useEffect(() => {
     if (!started || !voice || !next) return
     const key = `${stepIndex + 1}`
+    const lung = (next.la_m - (current?.la_m ?? 0)) > PRE_ANNOUNCE_M + 250   // drum lung pana la manevra
     if (toNext <= ANNOUNCE_M && !announced.current.has(key) && !arrived) {
       announced.current.add(key)
       speak(next.tip === 'sosire' ? `Ajungi la ${next.strada}` : next.text)
     } else if (next.benzi_text && toNext <= LANES_M && toNext > ANNOUNCE_M + 50 && !announced.current.has(`b${key}`)) {
       announced.current.add(`b${key}`)
+      announced.current.add(`p${key}`)
       speak(`${next.benzi_text}, apoi ${next.text.charAt(0).toLowerCase()}${next.text.slice(1)}`)
+    } else if (lung && next.tip !== 'sosire' && toNext <= PRE_ANNOUNCE_M && toNext > ANNOUNCE_M + 100 && !announced.current.has(`p${key}`)) {
+      announced.current.add(`p${key}`)
+      speak(inDistance(next, Math.round(toNext / 50) * 50))
     }
-  }, [started, voice, next, stepIndex, toNext, arrived])
+  }, [started, voice, next, current, stepIndex, toNext, arrived])
   useEffect(() => {
     if (started && voice && arrived && stop && !announced.current.has('sosire')) {
       announced.current.add('sosire')
@@ -253,13 +310,53 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     return () => clearInterval(id)
   }, [simulating, leg, cum, truckId])
 
-  function start() {
+  function start(resumed = false) {
     setStarted(true)
     setFollow(true)
     // harta in ecran, sub bara de instructiuni de sus
     setTimeout(() => document.querySelector('.map-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
-    if (voice) speak(current ? `Navigație pornită. ${current.text}` : 'Navigație pornită')
+    if (voice) speak(resumed ? 'Navigație reluată' : current ? `Navigație pornită. ${current.text}` : 'Navigație pornită')
   }
+
+  // reluare dupa o reincarcare a paginii: cand navigatia a sosit de la server
+  const resumePending = useRef(!!saved?.started)
+  useEffect(() => {
+    if (resumePending.current && nav && leg && !started) {
+      resumePending.current = false
+      start(true)
+    }
+  })
+
+  // ce tinem minte pe telefon (si "cand", ca o navigatie uitata de ieri sa nu se reia singura)
+  useEffect(() => {
+    const save = () => {
+      try {
+        if (started) localStorage.setItem(navKey(truckId), JSON.stringify({ started, voice, viewMode, at: Date.now() }))
+        else if (!resumePending.current) localStorage.removeItem(navKey(truckId))
+      } catch { /* fara storage: navigatia merge, doar nu se reia singura */ }
+    }
+    save()
+    if (!started) return
+    const id = setInterval(save, 30_000)
+    return () => clearInterval(id)
+  }, [started, voice, viewMode, truckId])
+
+  // ecranul ramane aprins cat timp merge navigatia (altfel telefonul se blocheaza si poate inchide pagina)
+  useEffect(() => {
+    if (!started || !('wakeLock' in navigator)) return
+    type Lock = { release: () => Promise<void> }
+    let lock: Lock | null = null
+    let alive = true
+    const take = () => {
+      if (document.visibilityState !== 'visible') return
+      ;(navigator as Navigator & { wakeLock: { request: (t: 'screen') => Promise<Lock> } }).wakeLock
+        .request('screen').then(l => { if (alive) lock = l; else l.release() }).catch(() => { /* refuzat: nimic grav */ })
+    }
+    take()
+    // blocarea se pierde cand pagina trece in fundal; o reluam cand revine
+    document.addEventListener('visibilitychange', take)
+    return () => { alive = false; document.removeEventListener('visibilitychange', take); lock?.release().catch(() => {}) }
+  }, [started])
 
   return {
     nav, leg, stop, error, loading, started, voice, follow, simulating, position, heading,
@@ -268,7 +365,7 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     tilted: started && follow && viewMode === '3d',
     current, next, then: leg?.pasi[stepIndex + 2] ?? null, toNext, remaining, arrived, etaMin, stepIndex,
     refresh, start,
-    stop_: () => { setStarted(false); setSimulating(false); window.speechSynthesis?.cancel() },
+    stop_: () => { resumePending.current = false; setStarted(false); setSimulating(false); window.speechSynthesis?.cancel() },
     setVoice, setFollow,
     toggleSim: () => {
       setSimulating(s => !s)
@@ -287,9 +384,13 @@ export function NavCard({ n, onComplete }: {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState('')
 
-  if (n.error) return <section className="panel nav-card"><p className="empty">{n.error}</p></section>
   if (!n.nav || !n.leg || !n.stop) {
-    return <section className="panel nav-card"><p className="empty">{n.loading ? 'Calculez navigația...' : 'Nu există navigație pentru acest camion.'}</p></section>
+    return (
+      <section className="panel nav-card">
+        <p className="empty">{n.error || (n.loading ? 'Calculez navigația...' : 'Nu există navigație pentru acest camion.')}</p>
+        {n.error && !n.loading && <button className="secondary-button" onClick={() => n.refresh()}>Încearcă din nou</button>}
+      </section>
+    )
   }
 
   const ramase = n.nav.opriri.filter(o => o.tip !== 'depou').length
@@ -335,7 +436,7 @@ export function NavCard({ n, onComplete }: {
 
       <div className="nav-actions">
         {!n.started ? (
-          <button className="primary-button" onClick={n.start}><Navigation2 size={17} /> Pornește navigația</button>
+          <button className="primary-button" onClick={() => n.start()}><Navigation2 size={17} /> Pornește navigația</button>
         ) : n.stop.tip !== 'depou' ? (
           <button className="primary-button" disabled={busy} onClick={done}>
             {busy ? 'Se salvează…' : `${n.stop.tip === 'depozitare' ? 'Am colectat' : 'Am golit ghena'} · următoarea`}
@@ -365,6 +466,7 @@ export function NavCard({ n, onComplete }: {
       </div>
 
       {failed && <p className="nav-error" role="alert">{failed}</p>}
+      {!failed && n.error && <p className="nav-error" role="status">{n.error}</p>}
 
       <div className="nav-footer">
         <button className="link-button" onClick={n.toggleSim}>
@@ -529,6 +631,7 @@ const GOOD_DIRS: Record<NavStep['tip'], LaneDir[]> = {
   stanga: ['left', 'sharp_left'], 'usor-stanga': ['slight_left', 'left', 'through'],
   dreapta: ['right', 'sharp_right'], 'usor-dreapta': ['slight_right', 'right', 'through'],
   inainte: ['through', 'slight_left', 'slight_right'], intoarcere: ['reverse', 'left'], start: [], sosire: [],
+  giratoriu: [], 'iesire-giratoriu': [],
 }
 
 function goodDirs(tip: NavStep['tip'], dirs: LaneDir[]) {
@@ -550,7 +653,14 @@ function LaneIcon({ dirs, good }: { dirs: LaneDir[]; good: LaneDir[] }) {
 
 const MANEVRA: Record<NavStep['tip'], string> = {
   start: 'Pornește', inainte: 'Continuă înainte', 'usor-dreapta': 'Ușor la dreapta', dreapta: 'Virează la dreapta',
-  'usor-stanga': 'Ușor la stânga', stanga: 'Virează la stânga', intoarcere: 'Întoarce-te', sosire: 'Destinația'
+  'usor-stanga': 'Ușor la stânga', stanga: 'Virează la stânga', intoarcere: 'Întoarce-te', sosire: 'Destinația',
+  giratoriu: 'Sens giratoriu', 'iesire-giratoriu': 'Ieși din giratoriu'
+}
+
+function actiune(step: NavStep) {
+  if (step.tip === 'giratoriu' && step.iesire) return `Sens giratoriu · ieșirea ${step.iesire}`
+  if (step.tip === 'iesire-giratoriu' && step.iesire) return `Ieșirea ${step.iesire} din giratoriu`
+  return MANEVRA[step.tip]
 }
 
 export function NavTopBar({ n }: { n: NavState }) {
@@ -587,15 +697,15 @@ export function NavTopBar({ n }: { n: NavState }) {
   const next = n.next
   const strada = next.tip === 'sosire' ? n.stop.nume : next.strada
   const showLanes = !!next.benzi && n.toNext <= LANES_M
-  const showThen = !showLanes && n.then && n.then.tip !== 'sosire' && next.distanta_m <= 400
+  const showThen = !showLanes && n.then && n.then.tip !== 'sosire' && n.then.tip !== 'iesire-giratoriu' && next.distanta_m <= 400
 
   return (
     <div ref={bar} className="nav-topbar" role="status" aria-live="polite">
       <div className="nav-topbar-main">
-        <div className="nav-topbar-icon"><ManeuverIcon tip={next.tip} size={44} /></div>
+        <div className="nav-topbar-icon"><ManeuverIcon tip={next.tip} step={next} size={44} /></div>
         <div className="nav-topbar-text">
           <span className="nav-topbar-distance">{formatDistance(n.toNext)}</span>
-          <span className="nav-topbar-action">{MANEVRA[next.tip]}</span>
+          <span className="nav-topbar-action">{actiune(next)}</span>
           <strong>{strada}</strong>
         </div>
         <div className="nav-topbar-eta">
@@ -617,7 +727,7 @@ export function NavTopBar({ n }: { n: NavState }) {
       )}
       {showThen && n.then && (
         <div className="nav-topbar-then">
-          Apoi <ManeuverIcon tip={n.then.tip} size={16} /> {n.then.strada}
+          Apoi <ManeuverIcon tip={n.then.tip} step={n.then} size={16} /> {n.then.strada}
         </div>
       )}
     </div>

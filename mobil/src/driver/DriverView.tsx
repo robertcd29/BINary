@@ -48,7 +48,7 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" s
 
 export function useDriver(truckId: string) {
   const geo = useGeolocation(true)
-  const navigation = useNavigation(truckId, geo.position, true)
+  const navigation = useNavigation(truckId, geo.position, true, geo.accuracy)
   const [route, setRoute] = useState<DriverRoute | null>(null)
   const [error, setError] = useState('')
 

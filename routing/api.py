@@ -833,7 +833,9 @@ def ruta_camion(camion: int):
     with _lock:
         plan = _state["plan"]
         if plan is None:
-            raise HTTPException(404, "Nu exista inca un plan al zilei. Dispecerul apasa Planifica pe dashboard.")
+            # dupa o repornire planul se calculeaza cateva secunde: 503 = "mai incearca", aplicatia
+            # reincearca singura si soferul ramane pe ruta si navigatia pe care le are
+            raise HTTPException(503, "Planul zilei se calculează, revine în câteva secunde")
         ruta = next((r for r in plan["routes"] if r["truck"] == camion), None)
         if ruta is None:
             raise HTTPException(404, f"Camionul {camion} nu are ruta azi")
@@ -870,7 +872,9 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
     with _lock:
         plan = _state["plan"]
         if plan is None:
-            raise HTTPException(404, "Nu exista inca un plan al zilei. Dispecerul apasa Planifica pe dashboard.")
+            # dupa o repornire planul se calculeaza cateva secunde: 503 = "mai incearca", aplicatia
+            # reincearca singura si soferul ramane pe ruta si navigatia pe care le are
+            raise HTTPException(503, "Planul zilei se calculează, revine în câteva secunde")
         ruta = next((r for r in plan["routes"] if r["truck"] == camion), None)
         if ruta is None:
             raise HTTPException(404, f"Camionul {camion} nu are ruta azi")
@@ -905,7 +909,17 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
 
     etape, prev = [], start
     for o in opriri:
-        etape.append(engine.etapa_navigatie(prev, (o["lat"], o["lng"]), o["nume"]))
+        try:
+            etape.append(engine.etapa_navigatie(prev, (o["lat"], o["lng"]), o["nume"]))
+        except Exception as e:
+            # o oprire fara drum pe harta nu strica toata navigatia: etapa ei e o linie dreapta
+            print("rutare: etapa de navigatie a esuat:", o["id"], e)
+            d = round(engine._m(list(prev), [o["lat"], o["lng"]]))
+            etape.append({"geometrie": [list(prev), [o["lat"], o["lng"]]], "distanta_m": d, "pasi": [
+                {"tip": "start", "text": f"Mergi spre {o['nume']}", "strada": o["nume"], "la_m": 0,
+                 "lat": prev[0], "lng": prev[1], "distanta_m": d},
+                {"tip": "sosire", "text": f"Ai ajuns la {o['nume']}", "strada": o["nume"], "la_m": d,
+                 "lat": o["lat"], "lng": o["lng"], "distanta_m": 0}]})
         prev = (o["lat"], o["lng"])
     return {"camion": camion, "opriri": opriri, "etape": etape}
 
