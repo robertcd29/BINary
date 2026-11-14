@@ -469,7 +469,25 @@ def golita(bin_id: str):
         _state["urgent"][bin_id] = False
         _state["facute"].add(bin_id)
         _event({"id": bin_id, "status": "golita"})
+        _dupa_bifare(bin_id)
     return {"status": "ok"}
+
+
+def _dupa_bifare(sid):
+    """Soferul a bifat o oprire: opririle ramase ale camionului lui se reordoneaza de unde e acum."""
+    plan = _state["plan"]
+    if plan is None:
+        return
+    r = next((x for x in plan["routes"] if sid in x["stops"]), None)
+    if r is None:
+        return
+    poz = _state["pozitii"].get(r["truck"])
+    proaspat = poz and (datetime.now(timezone.utc) - datetime.fromisoformat(poz["la"])).total_seconds() < 120
+    try:
+        engine.reordoneaza(plan, r["truck"], _state["facute"], (poz["lat"], poz["lng"]) if proaspat else None)
+    except Exception as e:          # reordonarea e un bonus: daca pica, ruta ramane cea de dimineata
+        print("rutare: reordonarea a esuat:", e)
+
 
 
 # ---------- depozitari ilegale (camera prin backend, sau cetateni) ----------
@@ -503,6 +521,7 @@ def alerta_colectata(alert_id: str):
         if not found:
             raise HTTPException(404, "Alerta nu exista sau e deja colectata")
         _state["facute"].add(alert_id)
+        _dupa_bifare(alert_id)
     return {"status": "ok"}
 
 

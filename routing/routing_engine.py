@@ -625,3 +625,51 @@ def add_alert(plan, alert, kind="alert"):
         plan["metrics"]["bins_collected"] += 1
         plan["metrics"]["bins_skipped"] -= 1
     return result
+
+
+def reordoneaza(plan, truck, facute, start=None):
+    """Dupa ce soferul bifeaza o oprire, reordoneaza opririle ramase ale camionului pornind de unde e acum.
+
+    Ordinea din planul de dimineata e optima pentru tot traseul pornit din depou; daca soferul
+    bifeaza mai devreme sau ia alt drum, urmatoarea oprire din lista poate sa nu mai fie cea mai
+    buna. start = (lat, lng) de la GPS (optional); fara el, pleaca de la ultima oprire facuta.
+    """
+    r = next((x for x in plan["routes"] if x["truck"] == truck), None)
+    if r is None:
+        return
+    st = plan["_stops"]
+    facute_aici = [s for s in r["stops"] if s != "depot" and s in facute]
+    ramase = [s for s in r["stops"] if s != "depot" and s not in facute]
+    if len(ramase) < 2:
+        return
+    x = st[facute_aici[-1]] if facute_aici else st["depot"]
+    if start is not None:
+        gps, off = _snap(float(start[0]), float(start[1]))
+        if off <= MAX_SNAP_M:
+            x = gps
+    puncte = [x] + [st[s] for s in ramase] + [st["depot"]]
+    M = _matrix(puncte)
+    n = len(puncte)
+    manager = pywrapcp.RoutingIndexManager(n, 1, [0], [n - 1])   # pleaca de unde e, se termina la depou
+    routing = pywrapcp.RoutingModel(manager)
+    cb = routing.RegisterTransitCallback(lambda a, b: int(M[manager.IndexToNode(a)][manager.IndexToNode(b)]))
+    routing.SetArcCostEvaluatorOfAllVehicles(cb)
+    params = pywrapcp.DefaultRoutingSearchParameters()
+    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    params.time_limit.FromMilliseconds(500)
+    sol = routing.SolveWithParameters(params)
+    if sol is None:
+        return
+    ordine, idx = [], sol.Value(routing.NextVar(routing.Start(0)))
+    while not routing.IsEnd(idx):
+        ordine.append(ramase[manager.IndexToNode(idx) - 1])
+        idx = sol.Value(routing.NextVar(idx))
+    stops = ["depot"] + facute_aici + ordine + ["depot"]
+    noua = sum(_leg(st[a], st[b]) for a, b in zip(stops, stops[1:]))
+    plan["total_distance_m"] += int(noua) - r["distance_m"]
+    r.update(stops=stops, geometry=_draw(plan, stops), distance_m=int(noua))
+    m = plan["metrics"]
+    m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
+    if m.get("baseline_km"):
+        m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
