@@ -73,16 +73,6 @@ function EcranLogin({ s }: { s: Sesiune }) {
   )
 }
 
-function FaraAcces({ email }: { email?: string }) {
-  return (
-    <div className="login">
-      <h1>Doar pentru șoferi</h1>
-      <p>Contul {email} nu are rol de șofer. Intră cu contul de șofer primit de la dispecerat.</p>
-      <button className="btn-primary login-btn" onClick={() => iesi()}>Intră cu alt cont</button>
-    </div>
-  )
-}
-
 export default function App() {
   const [role, setRole] = useState<Role>('citizen')
   const [truckId, setTruckId] = useState('0')
@@ -94,25 +84,34 @@ export default function App() {
 
   if (!sesiune) return <div className="app"><div className="login"><p>Se încarcă…</p></div></div>
   if (sesiune.activ && !sesiune.logat) return <div className="app"><EcranLogin s={sesiune} /></div>
-  const poateConduce = sesiune.roluri.includes('sofer') || sesiune.roluri.includes('admin')
+  // fiecare rol vede doar partea lui: dispecerul lucreaza in dashboard, soferul doar cu ruta lui
+  if (sesiune.activ && sesiune.roluri.includes('admin')) {
+    location.replace('/dispecer/')
+    return <div className="app"><div className="login"><p>Te ducem la dispecerat…</p></div></div>
+  }
+  const doarSofer = sesiune.activ && sesiune.roluri.includes('sofer')
+  const doarCetatean = sesiune.activ && !doarSofer
+  const rolAfisat: Role = doarSofer ? 'driver' : doarCetatean ? 'citizen' : role
 
   return (
-    <div className={`app role-${role}`}>
+    <div className={`app role-${rolAfisat}`}>
       <header className="appbar">
         <div className="brand">
           <span className="brand-mark"><BrandMark /></span>
           <span className="brand-name">BIN<b>ary</b></span>
         </div>
-        {role === 'driver' && (
+        {rolAfisat === 'driver' && (
           <select className="truck-select" value={truckId} onChange={e => setTruckId(e.target.value)} aria-label="Camionul tău"
             style={{ borderColor: TRUCK_COLORS[Number(truckId)] }}>
             {TRUCK_COLORS.map((_, i) => <option key={i} value={i}>Camion {i + 1}</option>)}
           </select>
         )}
-        <div className="segmented" role="tablist" aria-label="Mod">
-          <button role="tab" aria-selected={role === 'citizen'} onClick={() => setRole('citizen')}>Cetățean</button>
-          <button role="tab" aria-selected={role === 'driver'} onClick={() => setRole('driver')}>Șofer</button>
-        </div>
+        {!sesiune.activ && (   // fara login (comutatorul oprit) se poate trece intre moduri, ca inainte
+          <div className="segmented" role="tablist" aria-label="Mod">
+            <button role="tab" aria-selected={role === 'citizen'} onClick={() => setRole('citizen')}>Cetățean</button>
+            <button role="tab" aria-selected={role === 'driver'} onClick={() => setRole('driver')}>Șofer</button>
+          </div>
+        )}
         {sesiune.activ && (
           <button className="logout" onClick={() => iesi()} aria-label={`Ieși din cont (${sesiune.email})`} title={sesiune.email}>
             <LogOut size={18} />
@@ -121,7 +120,7 @@ export default function App() {
       </header>
 
       <main className="content">
-        {role === 'citizen' ? <Citizen /> : poateConduce ? <Driver key={truckId} truckId={truckId} /> : <FaraAcces email={sesiune.email} />}
+        {rolAfisat === 'citizen' ? <Citizen /> : <Driver key={truckId} truckId={truckId} />}
       </main>
     </div>
   )
