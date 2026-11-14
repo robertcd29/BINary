@@ -63,8 +63,8 @@ FOLOSESTE_SIMULATE = True       # True = pe langa ghenele din trashes, si cele 6
 CENTRU = (45.748, 21.235)
 ZONE = {   # unghiul se masoara de la nord, in sensul acelor de ceasornic
     0: {"nume": "Vest",     "senzor": "TM-011", "de_la": 210, "pana_la": 330},
-    1: {"nume": "Nord-Est", "senzor": "TM-016", "de_la": 330, "pana_la": 90},
-    2: {"nume": "Sud",      "senzor": "TM-015", "de_la": 90,  "pana_la": 210},
+    1: {"nume": "Nord-Est", "senzor": "TM-015", "de_la": 330, "pana_la": 90},
+    2: {"nume": "Sud",      "senzor": "TM-016", "de_la": 90,  "pana_la": 210},
 }
 SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
 # 6 camioane: TM 01-03 strang deseurile menajere, TM 04-06 reciclabilele; cate unul din fiecare pe zona
@@ -97,9 +97,9 @@ FORMULE = {
     "TM-005": ("TM-011", lambda x: 0.6 * x + 30),     # Vest
     "TM-006": ("TM-011", lambda x: 0.4 * x + 50),     # Vest
     "TM-017": ("TM-011", lambda x: 0.7 * x + 20),     # Vest
-    "TM-001": ("TM-016", lambda x: 100 - x),          # Nord-Est
-    "TM-008": ("TM-016", lambda x: 0.5 * x + 40),     # Nord-Est
-    "TM-002": ("TM-015", lambda x: 100 - x),          # Sud
+    "TM-001": ("TM-015", lambda x: 100 - x),          # Nord-Est
+    "TM-008": ("TM-015", lambda x: 0.5 * x + 40),     # Nord-Est
+    "TM-002": ("TM-016", lambda x: 100 - x),          # Sud
 }
 
 # ghenele simulate, raspandite pe toata harta (vezi generate_sim_bins.py)
@@ -108,9 +108,13 @@ with open(HERE / "sim_bins.json") as f:
 _TM_POZ = {"TM-001": (45.774718, 21.2633061), "TM-002": (45.744593, 21.267267), "TM-003": (45.7121271, 21.198657),
            "TM-004": (45.77612, 21.2135825), "TM-005": (45.76, 21.197), "TM-006": (45.766, 21.218),
            "TM-007": (45.779, 21.226), "TM-008": (45.7785, 21.2255), "TM-009": (45.778, 21.207),
-           "TM-010": (45.7588, 21.2135), "TM-011": (45.746, 21.224), "TM-012": (45.7482, 21.2045),
-           "TM-013": (45.748, 21.204), "TM-014": (45.7485, 21.205), "TM-015": (45.743, 21.237),
-           "TM-016": (45.755, 21.245), "TM-017": (45.7585, 21.224)}
+           "TM-010": (45.7588, 21.2135), "TM-011": (45.7667103, 21.1952331), "TM-012": (45.7482, 21.2045),
+           "TM-013": (45.748, 21.204), "TM-014": (45.7485, 21.205), "TM-015": (45.7801024, 21.2200485),
+           "TM-016": (45.7156528, 21.2580798), "TM-017": (45.7585, 21.224)}
+# senzorii reali stau unde erau inainte ghenele simulate SIM-19, SIM-59 si SIM-28 (si invers)
+SENZORI_LOC = {"TM-011": (45.7667103, 21.1952331, "Ghena Strada Locotenent Ovidiu Balea", "Strada Locotenent Ovidiu Balea, Timisoara"),
+               "TM-015": (45.7801024, 21.2200485, "Ghena Calea Aradului", "Calea Aradului, Timisoara"),
+               "TM-016": (45.7156528, 21.2580798, "Ghena Strada Poeniței", "Strada Poeniței, Timisoara")}
 ZONA_CAMION = {bid: zona_pentru(*p) for bid, p in _TM_POZ.items()}           # ghena -> zona
 ZONA_CAMION.update({bid: zona_pentru(b["lat"], b["lon"]) for bid, b in SIM.items()})
 # ce strange fiecare ghena: o ghena de reciclabile o goleste doar camionul de reciclabile al zonei
@@ -190,7 +194,7 @@ def init_db():
         with conn.cursor() as cur:
             cur.executemany(
                 """INSERT INTO rutare_pubele (id, lat, lng, umplere, capacitate_l)
-                   VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                   VALUES (%s, %s, %s, %s, %s) ON CONFLICT (id) DO UPDATE SET lat = EXCLUDED.lat, lng = EXCLUDED.lng""",
                 [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["capacity_l"])
                  for b in sim])
             # si in tabela trashes a backend-ului, ca ghenele simulate sa arate peste tot ca unele reale
@@ -200,9 +204,12 @@ def init_db():
                        VALUES (%s, %s, %s, %s, now(), %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
                     [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["nume"], b["adresa"],
                       "ghena_reciclabile" if b.get("deseu") == "reciclabil" else "ghena") for b in sim])
-                cur.executemany("UPDATE trashes SET tip = %s WHERE id = %s",
-                                [("ghena_reciclabile" if b.get("deseu") == "reciclabil" else "ghena", b["id"])
-                                 for b in sim])
+                # locul, numele si tipul din sim_bins.json sunt cele valabile (umplerea ramane cea curenta)
+                cur.executemany("UPDATE trashes SET tip = %s, lat = %s, lng = %s, nume = %s, adresa = %s WHERE id = %s",
+                                [("ghena_reciclabile" if b.get("deseu") == "reciclabil" else "ghena",
+                                  b["lat"], b["lon"], b["nume"], b["adresa"], b["id"]) for b in sim])
+                cur.executemany("UPDATE trashes SET lat = %s, lng = %s, nume = %s, adresa = %s WHERE id = %s",
+                                [(*v, k) for k, v in SENZORI_LOC.items()])
 
 
 init_db()

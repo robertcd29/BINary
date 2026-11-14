@@ -182,12 +182,12 @@
   },
   {
    "id": "SIM-19",
-   "lat": 45.7667103,
-   "lon": 21.1952331,
+   "lat": 45.746,
+   "lon": 21.224,
    "capacity_l": 1100,
    "fill_level": 0.93,
-   "nume": "Ghena Strada Locotenent Ovidiu Balea",
-   "adresa": "Strada Locotenent Ovidiu Balea",
+   "nume": "Insula ecologica 27",
+   "adresa": "Strada Timis nr. 10, Timisoara",
    "deseu": "menajer"
   },
   {
@@ -272,12 +272,12 @@
   },
   {
    "id": "SIM-28",
-   "lat": 45.7156528,
-   "lon": 21.2580798,
+   "lat": 45.755,
+   "lon": 21.245,
    "capacity_l": 240,
    "fill_level": 0.87,
-   "nume": "Ghena SIM-28",
-   "adresa": null,
+   "nume": "Insula ecologica 71",
+   "adresa": "Intrarea Doinei nr. 21, Timisoara",
    "deseu": "menajer"
   },
   {
@@ -582,12 +582,12 @@
   },
   {
    "id": "SIM-59",
-   "lat": 45.7801024,
-   "lon": 21.2200485,
+   "lat": 45.743,
+   "lon": 21.237,
    "capacity_l": 1100,
    "fill_level": 0.36,
-   "nume": "Ghena Calea Aradului",
-   "adresa": "Calea Aradului",
+   "nume": "Insula ecologica 62",
+   "adresa": "Strada Babadag nr. 6, Timisoara",
    "deseu": "menajer"
   },
   {
