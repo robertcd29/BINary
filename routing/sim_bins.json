@@ -1,0 +1,544 @@
+{
+ "bins": [
+  {
+   "id": "SIM-01",
+   "lat": 45.7544395,
+   "lon": 21.1986126,
+   "capacity_l": 240,
+   "fill_level": 0.59,
+   "nume": "Ghena Strada Bârzava",
+   "adresa": "Strada Bârzava"
+  },
+  {
+   "id": "SIM-02",
+   "lat": 45.7285746,
+   "lon": 21.2405936,
+   "capacity_l": 1100,
+   "fill_level": 0.13,
+   "nume": "Ghena Strada Mureș",
+   "adresa": "Strada Mureș"
+  },
+  {
+   "id": "SIM-03",
+   "lat": 45.7506593,
+   "lon": 21.2092471,
+   "capacity_l": 1100,
+   "fill_level": 0.95,
+   "nume": "Ghena Bulevardul Republicii",
+   "adresa": "Bulevardul Republicii"
+  },
+  {
+   "id": "SIM-04",
+   "lat": 45.7593325,
+   "lon": 21.2377475,
+   "capacity_l": 1100,
+   "fill_level": 0.07,
+   "nume": "Ghena Strada Nicu Filipescu",
+   "adresa": "Strada Nicu Filipescu"
+  },
+  {
+   "id": "SIM-05",
+   "lat": 45.7587116,
+   "lon": 21.2424106,
+   "capacity_l": 1100,
+   "fill_level": 0.91,
+   "nume": "Ghena Strada Andrei Mocioni",
+   "adresa": "Strada Andrei Mocioni"
+  },
+  {
+   "id": "SIM-06",
+   "lat": 45.7727896,
+   "lon": 21.2461343,
+   "capacity_l": 1100,
+   "fill_level": 0.43,
+   "nume": "Ghena Strada Sfinții Apostoli Petru și Pavel",
+   "adresa": "Strada Sfinții Apostoli Petru și Pavel"
+  },
+  {
+   "id": "SIM-07",
+   "lat": 45.7578381,
+   "lon": 21.2527039,
+   "capacity_l": 240,
+   "fill_level": 0.84,
+   "nume": "Ghena Strada Costache Negruzzi",
+   "adresa": "Strada Costache Negruzzi"
+  },
+  {
+   "id": "SIM-08",
+   "lat": 45.7227443,
+   "lon": 21.202751,
+   "capacity_l": 1100,
+   "fill_level": 0.64,
+   "nume": "Ghena Strada Arhitect Victor Vlad",
+   "adresa": "Strada Arhitect Victor Vlad"
+  },
+  {
+   "id": "SIM-09",
+   "lat": 45.7702974,
+   "lon": 21.2139612,
+   "capacity_l": 240,
+   "fill_level": 0.37,
+   "nume": "Ghena Strada Maria Tănase",
+   "adresa": "Strada Maria Tănase"
+  },
+  {
+   "id": "SIM-10",
+   "lat": 45.7198328,
+   "lon": 21.2064436,
+   "capacity_l": 1100,
+   "fill_level": 0.23,
+   "nume": "Ghena Strada Bârsei",
+   "adresa": "Strada Bârsei"
+  },
+  {
+   "id": "SIM-11",
+   "lat": 45.781834,
+   "lon": 21.2354071,
+   "capacity_l": 240,
+   "fill_level": 0.23,
+   "nume": "Ghena Calea Sever Bocu",
+   "adresa": "Calea Sever Bocu"
+  },
+  {
+   "id": "SIM-12",
+   "lat": 45.7296703,
+   "lon": 21.212993,
+   "capacity_l": 240,
+   "fill_level": 0.26,
+   "nume": "Ghena Strada Mureș",
+   "adresa": "Strada Mureș"
+  },
+  {
+   "id": "SIM-13",
+   "lat": 45.7519911,
+   "lon": 21.2173114,
+   "capacity_l": 240,
+   "fill_level": 0.63,
+   "nume": "Ghena Bulevardul Republicii",
+   "adresa": "Bulevardul Republicii"
+  },
+  {
+   "id": "SIM-14",
+   "lat": 45.7271487,
+   "lon": 21.2044002,
+   "capacity_l": 1100,
+   "fill_level": 0.51,
+   "nume": "Ghena Calea Șagului",
+   "adresa": "Calea Șagului"
+  },
+  {
+   "id": "SIM-15",
+   "lat": 45.7652418,
+   "lon": 21.2688498,
+   "capacity_l": 240,
+   "fill_level": 0.14,
+   "nume": "Ghena Strada Palmierilor",
+   "adresa": "Strada Palmierilor"
+  },
+  {
+   "id": "SIM-16",
+   "lat": 45.7247592,
+   "lon": 21.2502337,
+   "capacity_l": 1100,
+   "fill_level": 0.41,
+   "nume": "Ghena Strada Tosca",
+   "adresa": "Strada Tosca"
+  },
+  {
+   "id": "SIM-17",
+   "lat": 45.7108494,
+   "lon": 21.2446969,
+   "capacity_l": 240,
+   "fill_level": 0.07,
+   "nume": "Ghena Strada Alunului",
+   "adresa": "Strada Alunului"
+  },
+  {
+   "id": "SIM-18",
+   "lat": 45.7519107,
+   "lon": 21.2230025,
+   "capacity_l": 1100,
+   "fill_level": 0.31,
+   "nume": "Ghena Bulevardul Regele Ferdinand I",
+   "adresa": "Bulevardul Regele Ferdinand I"
+  },
+  {
+   "id": "SIM-19",
+   "lat": 45.7667103,
+   "lon": 21.1952331,
+   "capacity_l": 1100,
+   "fill_level": 0.93,
+   "nume": "Ghena Strada Locotenent Ovidiu Balea",
+   "adresa": "Strada Locotenent Ovidiu Balea"
+  },
+  {
+   "id": "SIM-20",
+   "lat": 45.7446184,
+   "lon": 21.2143073,
+   "capacity_l": 1100,
+   "fill_level": 0.26,
+   "nume": "Ghena Bulevardul 16 Decembrie 1989",
+   "adresa": "Bulevardul 16 Decembrie 1989"
+  },
+  {
+   "id": "SIM-21",
+   "lat": 45.7265342,
+   "lon": 21.2630162,
+   "capacity_l": 1100,
+   "fill_level": 0.43,
+   "nume": "Ghena Strada Emil Racoviță",
+   "adresa": "Strada Emil Racoviță"
+  },
+  {
+   "id": "SIM-22",
+   "lat": 45.7645095,
+   "lon": 21.2348516,
+   "capacity_l": 240,
+   "fill_level": 0.32,
+   "nume": "Ghena SIM-22",
+   "adresa": null
+  },
+  {
+   "id": "SIM-23",
+   "lat": 45.744417,
+   "lon": 21.228494,
+   "capacity_l": 1100,
+   "fill_level": 0.32,
+   "nume": "Ghena Strada Evliya Celebi",
+   "adresa": "Strada Evliya Celebi"
+  },
+  {
+   "id": "SIM-24",
+   "lat": 45.7327188,
+   "lon": 21.2601715,
+   "capacity_l": 1100,
+   "fill_level": 0.74,
+   "nume": "Ghena Piața General Gheorghe Domășnean",
+   "adresa": "Piața General Gheorghe Domășnean"
+  },
+  {
+   "id": "SIM-25",
+   "lat": 45.7456194,
+   "lon": 21.2545957,
+   "capacity_l": 240,
+   "fill_level": 0.37,
+   "nume": "Ghena Strada Profesor Doctor Aurel Păunescu Podeanu",
+   "adresa": "Strada Profesor Doctor Aurel Păunescu Podeanu"
+  },
+  {
+   "id": "SIM-26",
+   "lat": 45.7678872,
+   "lon": 21.2378028,
+   "capacity_l": 1100,
+   "fill_level": 0.27,
+   "nume": "Ghena Strada Divizia 9 Cavalerie",
+   "adresa": "Strada Divizia 9 Cavalerie"
+  },
+  {
+   "id": "SIM-27",
+   "lat": 45.7675706,
+   "lon": 21.2509586,
+   "capacity_l": 1100,
+   "fill_level": 0.45,
+   "nume": "Ghena Strada Geneva",
+   "adresa": "Strada Geneva"
+  },
+  {
+   "id": "SIM-28",
+   "lat": 45.7156528,
+   "lon": 21.2580798,
+   "capacity_l": 240,
+   "fill_level": 0.87,
+   "nume": "Ghena SIM-28",
+   "adresa": null
+  },
+  {
+   "id": "SIM-29",
+   "lat": 45.7761479,
+   "lon": 21.23994,
+   "capacity_l": 1100,
+   "fill_level": 0.18,
+   "nume": "Ghena Strada Holdelor",
+   "adresa": "Strada Holdelor"
+  },
+  {
+   "id": "SIM-30",
+   "lat": 45.7700361,
+   "lon": 21.2231025,
+   "capacity_l": 1100,
+   "fill_level": 0.8,
+   "nume": "Ghena Strada Miresei",
+   "adresa": "Strada Miresei"
+  },
+  {
+   "id": "SIM-31",
+   "lat": 45.7758717,
+   "lon": 21.2329918,
+   "capacity_l": 240,
+   "fill_level": 0.13,
+   "nume": "Ghena Calea Sever Bocu",
+   "adresa": "Calea Sever Bocu"
+  },
+  {
+   "id": "SIM-32",
+   "lat": 45.7325687,
+   "lon": 21.2487758,
+   "capacity_l": 240,
+   "fill_level": 0.51,
+   "nume": "Ghena Strada Oglinzilor",
+   "adresa": "Strada Oglinzilor"
+  },
+  {
+   "id": "SIM-33",
+   "lat": 45.744303,
+   "lon": 21.2089218,
+   "capacity_l": 1100,
+   "fill_level": 0.88,
+   "nume": "Ghena Strada Iancu Văcărescu",
+   "adresa": "Strada Iancu Văcărescu"
+  },
+  {
+   "id": "SIM-34",
+   "lat": 45.7570491,
+   "lon": 21.193527,
+   "capacity_l": 1100,
+   "fill_level": 0.72,
+   "nume": "Ghena Strada Johann Schwicker",
+   "adresa": "Strada Johann Schwicker"
+  },
+  {
+   "id": "SIM-35",
+   "lat": 45.7662298,
+   "lon": 21.2606262,
+   "capacity_l": 1100,
+   "fill_level": 0.52,
+   "nume": "Ghena Strada Gheorghe Adam",
+   "adresa": "Strada Gheorghe Adam"
+  },
+  {
+   "id": "SIM-36",
+   "lat": 45.7511842,
+   "lon": 21.2565836,
+   "capacity_l": 1100,
+   "fill_level": 0.11,
+   "nume": "Ghena Strada Petru Cermena",
+   "adresa": "Strada Petru Cermena"
+  },
+  {
+   "id": "SIM-37",
+   "lat": 45.7693389,
+   "lon": 21.2096602,
+   "capacity_l": 1100,
+   "fill_level": 0.53,
+   "nume": "Ghena Strada Storojineț",
+   "adresa": "Strada Storojineț"
+  },
+  {
+   "id": "SIM-38",
+   "lat": 45.7336331,
+   "lon": 21.211319,
+   "capacity_l": 1100,
+   "fill_level": 0.24,
+   "nume": "Ghena Strada Dumitru Kiriac",
+   "adresa": "Strada Dumitru Kiriac"
+  },
+  {
+   "id": "SIM-39",
+   "lat": 45.7463244,
+   "lon": 21.2389866,
+   "capacity_l": 240,
+   "fill_level": 0.92,
+   "nume": "Ghena Bulevardul Eroilor de la Tisa",
+   "adresa": "Bulevardul Eroilor de la Tisa"
+  },
+  {
+   "id": "SIM-40",
+   "lat": 45.7241903,
+   "lon": 21.2434336,
+   "capacity_l": 1100,
+   "fill_level": 0.95,
+   "nume": "Ghena Strada Orhideea",
+   "adresa": "Strada Orhideea"
+  },
+  {
+   "id": "SIM-41",
+   "lat": 45.7458429,
+   "lon": 21.2457696,
+   "capacity_l": 1100,
+   "fill_level": 0.2,
+   "nume": "Ghena Strada Wilhelm Conrad Röntgen",
+   "adresa": "Strada Wilhelm Conrad Röntgen"
+  },
+  {
+   "id": "SIM-42",
+   "lat": 45.7636775,
+   "lon": 21.247353,
+   "capacity_l": 1100,
+   "fill_level": 0.84,
+   "nume": "Ghena Strada Mihail Kogălniceanu",
+   "adresa": "Strada Mihail Kogălniceanu"
+  },
+  {
+   "id": "SIM-43",
+   "lat": 45.7180871,
+   "lon": 21.2633997,
+   "capacity_l": 1100,
+   "fill_level": 0.32,
+   "nume": "Ghena SIM-43",
+   "adresa": null
+  },
+  {
+   "id": "SIM-44",
+   "lat": 45.7559708,
+   "lon": 21.2296995,
+   "capacity_l": 240,
+   "fill_level": 0.29,
+   "nume": "Ghena Strada Proclamația de la Timișoara",
+   "adresa": "Strada Proclamația de la Timișoara"
+  },
+  {
+   "id": "SIM-45",
+   "lat": 45.7474061,
+   "lon": 21.2172903,
+   "capacity_l": 1100,
+   "fill_level": 0.31,
+   "nume": "Ghena Bulevardul 16 Decembrie 1989",
+   "adresa": "Bulevardul 16 Decembrie 1989"
+  },
+  {
+   "id": "SIM-46",
+   "lat": 45.726326,
+   "lon": 21.2184529,
+   "capacity_l": 1100,
+   "fill_level": 0.45,
+   "nume": "Ghena Strada Gavril Musicescu",
+   "adresa": "Strada Gavril Musicescu"
+  },
+  {
+   "id": "SIM-47",
+   "lat": 45.7390395,
+   "lon": 21.2309083,
+   "capacity_l": 1100,
+   "fill_level": 0.33,
+   "nume": "Ghena Strada Aron Pumnul",
+   "adresa": "Strada Aron Pumnul"
+  },
+  {
+   "id": "SIM-48",
+   "lat": 45.7178131,
+   "lon": 21.2321085,
+   "capacity_l": 1100,
+   "fill_level": 0.31,
+   "nume": "Ghena Bulevardul Aviației",
+   "adresa": "Bulevardul Aviației"
+  },
+  {
+   "id": "SIM-49",
+   "lat": 45.7375074,
+   "lon": 21.2162017,
+   "capacity_l": 1100,
+   "fill_level": 0.43,
+   "nume": "Ghena Strada Russu Șirianu",
+   "adresa": "Strada Russu Șirianu"
+  },
+  {
+   "id": "SIM-50",
+   "lat": 45.7309769,
+   "lon": 21.2311947,
+   "capacity_l": 1100,
+   "fill_level": 0.98,
+   "nume": "Ghena Strada Salcâmilor",
+   "adresa": "Strada Salcâmilor"
+  },
+  {
+   "id": "SIM-51",
+   "lat": 45.7798641,
+   "lon": 21.211492,
+   "capacity_l": 1100,
+   "fill_level": 0.64,
+   "nume": "Ghena Strada Freun Leo",
+   "adresa": "Strada Freun Leo"
+  },
+  {
+   "id": "SIM-52",
+   "lat": 45.7548695,
+   "lon": 21.2502799,
+   "capacity_l": 1100,
+   "fill_level": 0.85,
+   "nume": "Ghena Strada Iepurelui",
+   "adresa": "Strada Iepurelui"
+  },
+  {
+   "id": "SIM-53",
+   "lat": 45.7247118,
+   "lon": 21.2347745,
+   "capacity_l": 1100,
+   "fill_level": 0.63,
+   "nume": "Ghena Strada Jean Monnet",
+   "adresa": "Strada Jean Monnet"
+  },
+  {
+   "id": "SIM-54",
+   "lat": 45.7251266,
+   "lon": 21.2294235,
+   "capacity_l": 1100,
+   "fill_level": 0.5,
+   "nume": "Ghena Strada Gavril Musicescu",
+   "adresa": "Strada Gavril Musicescu"
+  },
+  {
+   "id": "SIM-55",
+   "lat": 45.7144226,
+   "lon": 21.2719762,
+   "capacity_l": 1100,
+   "fill_level": 0.87,
+   "nume": "Ghena Strada Iasomiei",
+   "adresa": "Strada Iasomiei"
+  },
+  {
+   "id": "SIM-56",
+   "lat": 45.7627602,
+   "lon": 21.2175327,
+   "capacity_l": 1100,
+   "fill_level": 0.55,
+   "nume": "Ghena Strada Teiului",
+   "adresa": "Strada Teiului"
+  },
+  {
+   "id": "SIM-57",
+   "lat": 45.7207077,
+   "lon": 21.245809,
+   "capacity_l": 240,
+   "fill_level": 0.48,
+   "nume": "Ghena Strada Ghioceilor",
+   "adresa": "Strada Ghioceilor"
+  },
+  {
+   "id": "SIM-58",
+   "lat": 45.7554977,
+   "lon": 21.2568348,
+   "capacity_l": 240,
+   "fill_level": 0.06,
+   "nume": "Ghena Strada Tigrului",
+   "adresa": "Strada Tigrului"
+  },
+  {
+   "id": "SIM-59",
+   "lat": 45.7801024,
+   "lon": 21.2200485,
+   "capacity_l": 1100,
+   "fill_level": 0.36,
+   "nume": "Ghena Calea Aradului",
+   "adresa": "Calea Aradului"
+  },
+  {
+   "id": "SIM-60",
+   "lat": 45.7500762,
+   "lon": 21.2617053,
+   "capacity_l": 240,
+   "fill_level": 0.96,
+   "nume": "Ghena Strada Herodot",
+   "adresa": "Strada Herodot"
+  }
+ ]
+}

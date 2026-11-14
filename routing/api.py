@@ -7,7 +7,7 @@ Cum circula datele (cum a stabilit echipa):
 - camera: Daria trimite coordonatele camerei la backend, iar backend-ul cheama
   POST /api/alerte cu {"lat", "lng", "sursa": "camera"};
 - datele noastre stau in tabele separate (rutare_*); pe langa pubelele reale din trashes,
-  planul include si cele 60 de pubele simulate din bins.json, ca orasul sa arate realist.
+  planul include si cele 60 de ghene simulate din sim_bins.json, ca orasul sa arate realist.
 
 Fluxul zilei:
 - dimineata: GET /api/rute (sau POST /api/rute/planifica) face planul;
@@ -49,7 +49,7 @@ HISTORY_SLOT = "1 minute"       # citirile se mediaza pe intervale, pentru regre
 MIN_HISTORY_H = 1.0             # istoricul real conteaza doar daca acopera cel putin o ora
 MAX_EVENTS = 50
 RAPORTARE_PCT = 5               # o schimbare de umplere de cel putin 5 puncte apare in fluxul live
-FOLOSESTE_SIMULATE = False      # True = pe langa ghenele din trashes, si cele 60 de pubele din bins.json
+FOLOSESTE_SIMULATE = True       # True = pe langa ghenele din trashes, si cele 60 de ghene simulate din sim_bins.json
 
 # ---------- zone si pubele cu formula (doar pentru prototip) ----------
 # Orasul e impartit in 3 zone, fiecare cu camionul ei si cu un senzor real.
@@ -58,7 +58,23 @@ ZONE = {
     1: {"nume": "Nord", "senzor": "TM-015", "pubele": ["TM-004", "TM-006", "TM-007", "TM-008", "TM-009"]},
     2: {"nume": "Est",  "senzor": "TM-016", "pubele": ["TM-001", "TM-002", "TM-017"]},
 }
-ZONA_CAMION = {bid: z for z, d in ZONE.items() for bid in [d["senzor"], *d["pubele"]]}
+ZONA_CAMION = {bid: z for z, d in ZONE.items() for bid in [d["senzor"], *d["pubele"]]}   # ghena -> zona
+CAMIOANE_ZONA = {z: [z, z + len(ZONE)] for z in ZONE}   # 6 camioane, cate 2 pe zona
+
+# ghenele simulate, raspandite pe toata harta (vezi generate_sim_bins.py); fiecare intra in zona
+# ghenei reale celei mai apropiate, ca zonele sa ramana compacte
+with open(HERE / "sim_bins.json") as f:
+    SIM = {b["id"]: b for b in json.load(f)["bins"]}
+_TM_POZ = {"TM-001": (45.774718, 21.2633061), "TM-002": (45.744593, 21.267267), "TM-003": (45.7121271, 21.198657),
+           "TM-004": (45.77612, 21.2135825), "TM-005": (45.76, 21.197), "TM-006": (45.766, 21.218),
+           "TM-007": (45.779, 21.226), "TM-008": (45.7785, 21.2255), "TM-009": (45.778, 21.207),
+           "TM-010": (45.7588, 21.2135), "TM-011": (45.746, 21.224), "TM-012": (45.7482, 21.2045),
+           "TM-013": (45.748, 21.204), "TM-014": (45.7485, 21.205), "TM-015": (45.743, 21.237),
+           "TM-016": (45.755, 21.245), "TM-017": (45.7585, 21.224)}
+for _b in SIM.values():
+    _cel = min(_TM_POZ, key=lambda t: engine._m(_TM_POZ[t], (_b["lat"], _b["lon"])))
+    ZONA_CAMION[_b["id"]] = ZONA_CAMION[_cel]
+CAMIOANE_PUBELA = {bid: CAMIOANE_ZONA[z] for bid, z in ZONA_CAMION.items()}
 SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
 
 # Unele pubele hardcodate isi iau umplerea dintr-o formula aplicata pe senzorul zonei lor,
@@ -110,8 +126,7 @@ def _connect():
 
 
 def init_db():
-    with open(HERE / "bins.json") as f:
-        sim = json.load(f)["bins"]
+    sim = list(SIM.values())
     with _connect() as conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS rutare_pubele (
             id TEXT PRIMARY KEY, lat DOUBLE PRECISION, lng DOUBLE PRECISION,
@@ -187,7 +202,7 @@ def _became_urgent(bin_row, level):
         return _event({"id": bid, "status": "urgenta", "reason": "e deja pe o ruta"})
     r = engine.add_alert(plan, {"id": bid, "lat": bin_row["lat"], "lng": bin_row["lng"],
                                 "volum_l": round(engine.DEFAULT_BIN_CAPACITY_L * level / 100),
-                                "camion": ZONA_CAMION.get(bid)}, kind="bin")
+                                "camioane": CAMIOANE_PUBELA.get(bid)}, kind="bin")
     return _event(r)
 
 
@@ -275,7 +290,8 @@ def _current_bins(conn):
     real = _trashes(conn)
     real_ids = {r["id"] for r in real}
     sim = [r for r in conn.execute(
-        "SELECT id, lat, lng, umplere, capacitate_l FROM rutare_pubele ORDER BY id").fetchall()
+        "SELECT id, lat, lng, umplere, capacitate_l FROM rutare_pubele WHERE id = ANY(%s) ORDER BY id",
+        (list(SIM),)).fetchall()
         if r["id"] not in real_ids] if FOLOSESTE_SIMULATE else []
     stats = {r["bin_id"]: r for r in conn.execute(f"""
         SELECT c.bin_id, max(c.ts) FILTER (WHERE c.umplere IS NOT NULL) AS last_good, max(c.ts) AS last_any
@@ -326,15 +342,29 @@ def _public(plan):
 def _build_plan(conn):
     _poll(conn)                     # planul porneste de la cele mai noi valori din trashes
     bins, history, surse = _current_bins(conn)
-    plan = engine.plan_routes(bins, history, compare_baseline=True, zone=ZONA_CAMION)
+    # depozitarile inca necolectate intra direct in optimizare, ca opriri obligatorii, ca solverul
+    # sa le puna unde se potrivesc in ruta (nu doar lipite dupa); oricare camion le poate lua
+    alerte = conn.execute("""SELECT * FROM rutare_alerte WHERE status IN ('deschisa', 'asignata')
+                             ORDER BY creata""").fetchall()
+    puncte = [{"id": a["id"], "lat": a["lat"], "lng": a["lng"], "umplere": 100,
+               "capacitate_l": a["volum_l"] or engine.ALERT_SIZES_L["medie"]} for a in alerte]
+    plan = engine.plan_routes(bins + puncte, history, compare_baseline=True, zone=CAMIOANE_PUBELA)
     for bid, s in surse.items():
         if s["sursa"] != "senzor":
             plan["warnings"].append(f"{bid}: {s['motiv']}")
     _state.update(plan=plan, bins=bins, surse=surse, facute=set())
-    # alertele inca necolectate (si cele venite inainte sa existe un plan) intra in planul nou
-    for a in conn.execute("""SELECT * FROM rutare_alerte WHERE status IN ('deschisa', 'asignata')
-                             ORDER BY creata""").fetchall():
-        _assign(conn, a)
+    pe_ruta = {s: r["truck"] for r in plan["routes"] for s in r["stops"]}
+    for a in alerte:
+        plan["predictions"].pop(a["id"], None)
+        if a["id"] in pe_ruta:
+            plan["alerts"].append({"id": a["id"], "kind": "alert", "lat": a["lat"], "lng": a["lng"],
+                                   "volum_l": a["volum_l"], "status": "assigned", "truck": pe_ruta[a["id"]]})
+            conn.execute("UPDATE rutare_alerte SET status = 'asignata', camion = %s WHERE id = %s",
+                         (pe_ruta[a["id"]], a["id"]))
+        else:   # nu incape azi: ramane deschisa si intra din mers, daca se elibereaza loc
+            if a["id"] in plan["skipped"]:
+                plan["skipped"].remove(a["id"])
+            _assign(conn, a)
     return plan
 
 
@@ -473,7 +503,7 @@ def toate_pubelele():
     """Pubelele reale si cele simulate, cu umplerea curenta, pentru harta din dashboard."""
     with _connect() as conn:
         bins, _, surse = _current_bins(conn)
-        info = {r["id"]: r for r in _trashes(conn)}
+        info = {**SIM, **{r["id"]: r for r in _trashes(conn)}}
     out = []
     for b in bins:
         try:
@@ -486,7 +516,7 @@ def toate_pubelele():
                     "pe_ruta_posibil": dist_m <= engine.MAX_SNAP_M,
                     # pe harta aratam exact valoarea din baza de date; rutarea foloseste in continuare
                     # valoarea filtrata (b["umplere"]), ca o citire gresita sa nu trimita un camion degeaba
-                    "umplere": r.get("umplere", b["umplere"]),
+                    "umplere": b["umplere"] if b["id"] in SIM else r.get("umplere", b["umplere"]),
                     "umplere_rutare": b["umplere"],
                     "nume": r.get("nume"), "adresa": r.get("adresa"), "tip": r.get("tip"),
                     "zona": ZONE[ZONA_CAMION[b["id"]]]["nume"] if b["id"] in ZONA_CAMION else None,
@@ -547,6 +577,7 @@ def ruta_camion(camion: int):
     with _connect() as conn:            # numele si adresa ghenelor, din tabela lui Robert
         info = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
             if _has_trashes(conn) else {}
+    info = {**SIM, **info}              # ghenele simulate au numele strazii din sim_bins.json
     opriri = []
     for sid in stops:
         if sid == "depot":
@@ -585,6 +616,7 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None):
     with _connect() as conn:
         info = {r["id"]: r for r in conn.execute("SELECT id, nume, adresa FROM trashes").fetchall()} \
             if _has_trashes(conn) else {}
+    info = {**SIM, **info}              # ghenele simulate au numele strazii din sim_bins.json
 
     depou = (engine.DEPOT["lat"], engine.DEPOT["lng"])
     opriri, start = [], depou

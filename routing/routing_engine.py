@@ -22,7 +22,7 @@ from predict import estimate
 # cale relativa la acest fisier, ca modulul sa mearga si cand serverul porneste din radacina repo-ului
 GRAPH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "timisoara_drive.graphml")
 DEPOT = {"lat": 45.7547817, "lng": 21.2506284}   # punctul de plecare al camioanelor
-NUM_TRUCKS = 3
+NUM_TRUCKS = 6
 TRUCK_CAPACITY_L = 8000
 RESERVE = 0.10
 MANDATORY_FILL = 0.85            # la fel ca rosul de pe harta (peste 85%)
@@ -411,7 +411,7 @@ def _clean_bins(bins, warnings):
 def _solve(M, demands, penalties, capacity, seconds, greedy=False, zone=None):
     """VRP cu capacitate. penalties = {index: penalitate}; fiecare pubela poate fi sarita contra penalitatii ei.
 
-    zone = {index: camion}: pubela poate fi colectata doar de camionul zonei ei (optional).
+    zone = {index: [camioane]}: pubela poate fi colectata doar de camioanele zonei ei (optional).
 
     greedy=True: fara optimizare, doar "mergi la cea mai apropiata pubela" (cum ar face un sofer fara aplicatie).
     """
@@ -426,9 +426,9 @@ def _solve(M, demands, penalties, capacity, seconds, greedy=False, zone=None):
         demand_idx, 0, [capacity] * NUM_TRUCKS, True, "Capacity")
     for node, penalty in penalties.items():
         routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
-    for node, truck in (zone or {}).items():
-        # -1 = sarita; altfel doar camionul zonei
-        routing.VehicleVar(manager.NodeToIndex(node)).SetValues([-1, truck])
+    for node, trucks in (zone or {}).items():
+        # -1 = sarita; altfel doar camioanele zonei
+        routing.VehicleVar(manager.NodeToIndex(node)).SetValues([-1, *trucks])
 
     params = pywrapcp.DefaultRoutingSearchParameters()
     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -470,7 +470,7 @@ def _empty_plan(depot, warnings):
 # ---------- API public ----------
 
 def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECONDS, zone=None):
-    """zone = {id pubela: camion}, optional: fiecare camion colecteaza doar pubelele zonei lui."""
+    """zone = {id pubela: [camioane]}, optional: fiecare pubela e colectata doar de camioanele zonei ei."""
     history = history or {}
     warnings = []
     depot, _ = _snap(DEPOT["lat"], DEPOT["lng"])
@@ -508,7 +508,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
             penalties[node] = 0                     # aproape goala: nu merita drumul
 
     capacity = int(TRUCK_CAPACITY_L * (1 - RESERVE))
-    zone_idx = {i: zone[b] for i, b in enumerate(ids) if zone and b in zone and 0 <= zone[b] < NUM_TRUCKS}
+    zone_idx = {i: [t for t in zone[b] if 0 <= t < NUM_TRUCKS] for i, b in enumerate(ids) if zone and b in zone}
     routes, total, visited = _solve(M, demands, penalties, capacity, seconds, zone=zone_idx)
     for r in routes:
         r["stops"] = [ids[i] for i in r["stops"]]
@@ -530,7 +530,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     if compare_baseline:
         # referinta = colectarea tuturor pubelelor fara optimizare (din aproape in aproape, cum ar
         # face un sofer fara aplicatie); o calculam o data pentru acelasi set de pubele
-        key = (tuple(ids), tuple(sorted(zone_idx.items())))
+        key = (tuple(ids), tuple(sorted((i, tuple(t)) for i, t in zone_idx.items())))
         if key not in _baseline_cache:
             base = _solve(M, demands, {i: MANDATORY_PENALTY for i in range(1, len(ids))},
                           TRUCK_CAPACITY_L, BASELINE_SECONDS, greedy=True, zone=zone_idx)
@@ -585,8 +585,8 @@ def add_alert(plan, alert, kind="alert"):
     for r in plan["routes"]:
         if r["load_l"] + volume > TRUCK_CAPACITY_L:
             continue
-        if alert.get("camion") is not None and r["truck"] != alert["camion"]:
-            continue                     # pubela dintr-o zona: doar camionul zonei ei
+        if alert.get("camioane") and r["truck"] not in alert["camioane"]:
+            continue                     # pubela dintr-o zona: doar camioanele zonei ei
         s = r["stops"]
         for k in range(len(s) - 1):
             a, b = st[s[k]], st[s[k + 1]]

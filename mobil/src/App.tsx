@@ -74,9 +74,7 @@ export default function App() {
         {role === 'driver' && (
           <select className="truck-select" value={truckId} onChange={e => setTruckId(e.target.value)} aria-label="Camionul tău"
             style={{ borderColor: TRUCK_COLORS[Number(truckId)] }}>
-            <option value="0">Camion 1</option>
-            <option value="1">Camion 2</option>
-            <option value="2">Camion 3</option>
+            {TRUCK_COLORS.map((_, i) => <option key={i} value={i}>Camion {i + 1}</option>)}
           </select>
         )}
         <div className="segmented" role="tablist" aria-label="Mod">

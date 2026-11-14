@@ -11,7 +11,7 @@ import {
 import { fillColor, formatDistance, TIMISOARA, useGeolocation } from '../lib'
 import { NavCard, NavLayer, type NavState, useNavigation } from '../Navigatie'
 
-export const TRUCK_COLORS = ['#2b59d9', '#7a4bc2', '#0e8c82']
+export const TRUCK_COLORS = ['#2b59d9', '#7a4bc2', '#0e8c82', '#b5487a', '#5b6b1f', '#c46a1b']   // ca pe dashboard, un camion pe culoare
 const SEND_EVERY_MS = 5000
 
 function FitRoute({ route }: { route: [number, number][] }) {
