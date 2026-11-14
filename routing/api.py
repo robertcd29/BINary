@@ -59,6 +59,7 @@ ZONE = {
     2: {"nume": "Est",  "senzor": "TM-016", "pubele": ["TM-001", "TM-002", "TM-017"]},
 }
 ZONA_CAMION = {bid: z for z, d in ZONE.items() for bid in [d["senzor"], *d["pubele"]]}
+SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
 
 # Unele pubele hardcodate isi iau umplerea dintr-o formula aplicata pe senzorul zonei lor,
 # ca sa se miste odata cu senzorii reali. Formule diferite, ca sa nu se miste toate la fel.
@@ -283,8 +284,10 @@ def _current_bins(conn):
     history = {k: v for k, v in _SIM_HISTORY.items()}
     # cateva minute de citiri nu spun nimic despre rata de umplere (regresia iese plata si
     # predictia "se umple in 8000 de ore"); pana se aduna o ora de date ramane istoricul simulat
+    # predictia de umplere doar pentru pubelele cu senzor: la cele hardcodate valorile sunt
+    # schimbate de mana sau din formula, deci o "rata de umplere" calculata din ele ar fi falsa
     history.update({k: v for k, v in _db_history(conn).items()
-                    if len(v) >= 3 and v[-1]["t_h"] - v[0]["t_h"] >= MIN_HISTORY_H})
+                    if k in SENZORI and len(v) >= 3 and v[-1]["t_h"] - v[0]["t_h"] >= MIN_HISTORY_H})
 
     now = datetime.now(timezone.utc)
     bins, surse = [], {}
