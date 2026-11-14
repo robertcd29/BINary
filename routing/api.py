@@ -24,13 +24,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 import io
+import base64
+import hmac
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))       # modulele din routing/ se importa intre ele fara pachet
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from PIL import Image
 from psycopg.rows import dict_row
 from pydantic import BaseModel
@@ -614,13 +616,52 @@ class Raportare(BaseModel):
     sursa: Literal["camera", "cetatean"] = "cetatean"
     marime: str = "medie"            # mica / medie / mare
     camera_id: str | None = None
+    imagine: str | None = None       # optional: poza camerei, JPEG in base64 (cu sau fara "data:image/jpeg;base64,")
+
+
+def _salveaza_poza(alert_id, b64):
+    """Poza trimisa de camera, salvata ca la raportarile cetatenilor (dashboard-ul o arata in popup)."""
+    cale = CAPTURES / f"{alert_id}.jpg"
+    if cale.exists():
+        return True                  # la duplicat ramane poza primei detectii
+    try:
+        date = base64.b64decode(b64.split(",", 1)[-1], validate=False)
+        Image.open(io.BytesIO(date)).convert("RGB").save(cale, "JPEG", quality=85)
+        return True
+    except Exception:
+        return False
 
 
 @router.post("/alerte")
 def alerta(r: Raportare):
-    """Backend-ul o cheama cand modelul Dariei detecteaza gunoi; acelasi punct de mai multe ori = o singura alerta."""
+    """Camera (modelul Dariei) sau backend-ul o cheama cand e detectat gunoi; acelasi punct de mai multe ori = o singura alerta."""
     with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
-        return _register_alert(conn, r.sursa, r.lat, r.lng, r.marime, r.camera_id)
+        rez = _register_alert(conn, r.sursa, r.lat, r.lng, r.marime, r.camera_id)
+    if r.imagine:
+        rez["imagine"] = "salvata" if _salveaza_poza(rez["id"], r.imagine) else "invalida"
+    return rez
+
+
+@router.post("/alerte/{alert_id}/disparuta")
+def alerta_disparuta(alert_id: str, x_cheie_camera: str | None = Header(None)):
+    """Camera anunta ca depozitarea nu mai e acolo (luata de altcineva sau detectie falsa).
+
+    Nu e o colectare: alerta se inchide cu statusul "disparuta", iar oprirea iese din ruta
+    camionului (nu ramane bifata). Apelul cere cheia camerelor (CHEIE_CAMERA din .env).
+    """
+    cheie = os.environ.get("CHEIE_CAMERA", "")
+    if not cheie:
+        raise HTTPException(503, "Cheia camerelor (CHEIE_CAMERA) nu e setata pe server")
+    if not x_cheie_camera or not hmac.compare_digest(x_cheie_camera, cheie):
+        raise HTTPException(401, "Cheie de cameră greșită")
+    with _connect() as conn, _lock:
+        found = conn.execute("""UPDATE rutare_alerte SET status = 'disparuta', inchisa = now()
+                                WHERE id = %s AND status IN ('deschisa', 'asignata')""", (alert_id,)).rowcount
+        if not found:
+            raise HTTPException(404, "Alerta nu exista sau e deja inchisa")
+        if _state["plan"] is not None:
+            engine.scoate_oprire(_state["plan"], alert_id)
+    return {"status": "ok"}
 
 
 @router.get("/alerte")

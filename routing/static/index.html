@@ -696,7 +696,8 @@
         const CAPACITATE_L = 8000;              // un camion, ca in motorul de rutare
         const L_PE_KM = 0.7;                    // camion de gunoi diesel: ~0,7 L motorina/km
         const KG_CO2_PE_L = 2.68;               // arderea unui litru de motorina
-        const STARE_ALERTA = { deschisa: "Nouă", asignata: "Pe rută", colectata: "Colectată", duplicat: "Duplicat" };
+        const STARE_ALERTA = { deschisa: "Nouă", asignata: "Pe rută", colectata: "Colectată", disparuta: "Dispărută (camera nu o mai vede)", duplicat: "Duplicat" };
+        const inchisa = a => a.status === "colectata" || a.status === "disparuta";
 
         // ---------- utilitare ----------
         const $ = s => document.querySelector(s);
@@ -950,17 +951,17 @@
             stratDepozitari.clearLayers();
             stare.alerte.filter(a => a.status !== "duplicat").forEach(a => {
                 const m = L.marker([a.lat, a.lng], {
-                    icon: L.divIcon({ className: "", html: `<div class="depozitare${a.status === "colectata" ? " colectata" : ""}"></div>`, iconSize: [16, 16] }),
+                    icon: L.divIcon({ className: "", html: `<div class="depozitare${inchisa(a) ? " colectata" : ""}"></div>`, iconSize: [16, 16] }),
                     zIndexOffset: 1500,
                 }).addTo(stratDepozitari);
                 const p = el("div");
                 p.append(el("b", "", a.sursa === "cetatean" ? "Raportată de un cetățean" : `Camera ${a.camera_id ?? ""}`.trim()));
                 p.append(el("div", "", STARE_ALERTA[a.status] || a.status));
                 if (a.descriere) p.append(el("div", "", a.descriere));
-                if (a.sursa === "cetatean") {
+                {   // poza cetateanului sau a camerei, daca exista (altfel imaginea dispare singura)
                     const img = el("img", "popup-poza");
                     img.src = `/captures/${a.id}.jpg`;
-                    img.alt = "Poza trimisă de cetățean";
+                    img.alt = a.sursa === "cetatean" ? "Poza trimisă de cetățean" : "Poza de la cameră";
                     img.onerror = () => img.remove();
                     p.append(img);
                 }
@@ -1107,8 +1108,8 @@
             lista.replaceChildren();
             // cele colectate mai stau putin in lista (sa se vada ca s-au rezolvat), apoi dispar
             const alerte = stare.alerte.filter(a => a.status !== "duplicat"
-                && !(a.status === "colectata" && Date.now() - new Date(a.inchisa ?? a.creata) > ASCUNDE_COLECTATE_MS));
-            const deschise = alerte.filter(a => a.status !== "colectata").length;
+                && !(inchisa(a) && Date.now() - new Date(a.inchisa ?? a.creata) > ASCUNDE_COLECTATE_MS));
+            const deschise = alerte.filter(a => !inchisa(a)).length;
             const c = $("#c-raport");
             c.textContent = deschise;
             c.classList.toggle("hot", deschise > 0);
@@ -1138,7 +1139,7 @@
                 body.append(el("p", "", a.descriere || `Mărime estimată: ${a.marime ?? "medie"}`));
                 const tags = el("div", "tags");
                 tags.style.margin = "0";
-                const st = el("span", `tag ${a.status === "colectata" ? "ok" : a.status === "asignata" ? "route" : "warn"}`,
+                const st = el("span", `tag ${a.status === "colectata" ? "ok" : a.status === "disparuta" ? "muted" : a.status === "asignata" ? "route" : "warn"}`,
                     a.status === "asignata" && a.camion != null ? `Pe ruta camionului ${a.camion + 1}` : STARE_ALERTA[a.status] || a.status);
                 if (a.status === "asignata" && a.camion != null) st.style.setProperty("--c", CULORI[a.camion % CULORI.length]);
                 tags.append(st);

@@ -669,3 +669,22 @@ def reordoneaza(plan, truck, facute, start=None):
     m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
     if m.get("baseline_km"):
         m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
+
+
+def scoate_oprire(plan, sid):
+    """Scoate o oprire din ruta (de exemplu o depozitare care a disparut), fara sa o considere facuta."""
+    for a in plan.get("alerts", []):
+        if a["id"] == sid:
+            a["status"] = "gone"
+    r = next((x for x in plan["routes"] if sid in x["stops"]), None)
+    if r is None:
+        return
+    st = plan["_stops"]
+    stops = [s for s in r["stops"] if s != sid]
+    noua = sum(_leg(st[a], st[b]) for a, b in zip(stops, stops[1:])) if len(stops) > 2 else 0
+    plan["total_distance_m"] += int(noua) - r["distance_m"]
+    r.update(stops=stops, geometry=_draw(plan, stops) if len(stops) > 2 else [], distance_m=int(noua))
+    m = plan["metrics"]
+    m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
+    if m.get("baseline_km"):
+        m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
