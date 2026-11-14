@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
     <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
     <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@auth0/auth0-spa-js@2/dist/auth0-spa-js.production.js"></script>
     <style>
         /* ---------- sistemul vizual BINary: asfalt, hartie, verde-petrol ---------- */
         :root {
@@ -155,6 +156,12 @@
         }
 
         .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+        /* ---------- ecranul de login / acces ---------- */
+        .acces { position: fixed; inset: 0; z-index: 5000; display: grid; place-items: center; background: #0f1a2bcc; }
+        .acces-card { display: grid; gap: 12px; max-width: 380px; padding: 28px; border-radius: 12px; background: var(--surface); text-align: center; }
+        .acces-card b { font-size: 18px; }
+        #cont[hidden] { display: none; }
 
         /* ---------- indicatori ---------- */
         .kpis {
@@ -608,6 +615,7 @@
                 </div>
             </div>
             <div class="live" id="live" aria-live="polite"><span class="live-dot"></span><span id="status">Se conectează…</span></div>
+            <button class="btn" id="cont" hidden title="Ieși din cont"></button>
             <button class="btn" id="reset" title="Aduce orașul la starea de dimineață, pentru următorul vizitator">Reset demo</button>
             <button class="btn btn-primary" id="planifica">
                 <svg class="icon"><use href="#i-play"/></svg>Planifică rutele de azi
@@ -702,8 +710,61 @@
             return s;
         }
 
+        // ---------- login (Auth0) ----------
+        let auth0Client = null;
+        async function antetAuth() {
+            if (!auth0Client) return {};
+            try { return { Authorization: `Bearer ${await auth0Client.getTokenSilently()}` }; }
+            catch { await auth0Client.loginWithRedirect(); return {}; }
+        }
+
+        function ecranAcces(mesaj, cuIesire) {
+            const d = el("div", "acces");
+            d.append(el("div", "acces-card"));
+            d.firstChild.append(el("b", "", "BINary · Dispecerat"), el("p", "", mesaj));
+            if (cuIesire) {
+                const b = el("button", "btn btn-primary", "Intră cu alt cont");
+                b.onclick = () => auth0Client.logout({ logoutParams: { returnTo: location.origin + "/dispecer/" } });
+                d.firstChild.append(b);
+            }
+            document.body.append(d);
+        }
+
+        // intoarce true daca dashboard-ul poate porni (login facut si rol de admin, sau login oprit)
+        async function login() {
+            const cfg = await fetch("/api/auth-config").then(r => r.json()).catch(() => ({ activ: false }));
+            if (!cfg.activ) return true;
+            if (!window.isSecureContext) {
+                ecranAcces("Loginul merge doar pe linkul https (trycloudflare). Deschide dashboard-ul de acolo.");
+                return false;
+            }
+            auth0Client = await auth0.createAuth0Client({
+                domain: cfg.domain, clientId: cfg.client_id, cacheLocation: "localstorage", useRefreshTokens: true,
+                authorizationParams: { redirect_uri: location.origin + "/dispecer/", audience: cfg.audience },
+            });
+            if (location.search.includes("code=") && location.search.includes("state=")) {
+                await auth0Client.handleRedirectCallback();
+                history.replaceState({}, "", location.pathname);
+            }
+            if (!await auth0Client.isAuthenticated()) {
+                await auth0Client.loginWithRedirect();
+                return false;
+            }
+            const date = await auth0Client.getIdTokenClaims();
+            const roluri = date["https://binary-api/roles"] || [];
+            const cont = $("#cont");
+            cont.textContent = `${date.email || date.name} · Ieșire`;
+            cont.hidden = false;
+            cont.onclick = () => auth0Client.logout({ logoutParams: { returnTo: location.origin + "/dispecer/" } });
+            if (!roluri.includes("admin")) {
+                ecranAcces(`Contul ${date.email || date.name} nu are acces la dispecerat (doar dispecerii, cu rol de admin).`, true);
+                return false;
+            }
+            return true;
+        }
+
         async function cere(metoda, url) {
-            const r = await fetch(url, { method: metoda });
+            const r = await fetch(url, { method: metoda, headers: metoda === "GET" ? {} : await antetAuth() });
             if (!r.ok) throw new Error(`${r.status} la ${url}`);
             return r.json();
         }
@@ -1210,8 +1271,11 @@
         }
         ceas();
         setInterval(ceas, 1000);
-        porneste();
-        setInterval(porneste, REIMPROSPATARE_MS);
+        login().then(ok => {
+            if (!ok) return;
+            porneste();
+            setInterval(porneste, REIMPROSPATARE_MS);
+        }).catch(e => ecranAcces(`Loginul nu a mers (${e.message}). Reîncarcă pagina.`));
     </script>
 </body>
 

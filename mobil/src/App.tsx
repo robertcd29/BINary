@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Camera, ClipboardList, List, Map as MapIcon, Navigation2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Camera, ClipboardList, List, LogOut, Map as MapIcon, Navigation2 } from 'lucide-react'
 
 import type { Role } from './api'
 import NearbyMap from './citizen/NearbyMap'
@@ -8,6 +8,7 @@ import MyReports from './citizen/MyReports'
 import { DriverNav, DriverStops, TRUCK_COLORS, useDriver } from './driver/DriverView'
 import { NavTopBar } from './Navigatie'
 import { useGeolocation } from './lib'
+import { iesi, intra, pornesteAuth, type Sesiune } from './auth'
 
 type CitizenTab = 'harta' | 'raport' | 'rapoarte'
 type DriverTab = 'navigatie' | 'opriri'
@@ -60,9 +61,40 @@ function Driver({ truckId }: { truckId: string }) {
   )
 }
 
+function EcranLogin({ s }: { s: Sesiune }) {
+  return (
+    <div className="login">
+      <span className="brand-mark login-mark"><BrandMark /></span>
+      <h1>BIN<b>ary</b></h1>
+      <p>Raportează depozitările de gunoi din Timișoara. Intră în cont ca să trimiți poze; șoferii intră cu contul primit de la dispecerat.</p>
+      {s.eroare ? <p className="login-err">{s.eroare}</p>
+        : <button className="btn-primary login-btn" onClick={() => intra()}>Intră în cont</button>}
+    </div>
+  )
+}
+
+function FaraAcces({ email }: { email?: string }) {
+  return (
+    <div className="login">
+      <h1>Doar pentru șoferi</h1>
+      <p>Contul {email} nu are rol de șofer. Intră cu contul de șofer primit de la dispecerat.</p>
+      <button className="btn-primary login-btn" onClick={() => iesi()}>Intră cu alt cont</button>
+    </div>
+  )
+}
+
 export default function App() {
   const [role, setRole] = useState<Role>('citizen')
-  const [truckId, setTruckId] = useState('2')
+  const [truckId, setTruckId] = useState('0')
+  const [sesiune, setSesiune] = useState<Sesiune | null>(null)
+
+  useEffect(() => {
+    pornesteAuth().then(setSesiune).catch(e => setSesiune({ activ: true, logat: false, roluri: [], eroare: `Loginul nu a mers (${e.message}).` }))
+  }, [])
+
+  if (!sesiune) return <div className="app"><div className="login"><p>Se încarcă…</p></div></div>
+  if (sesiune.activ && !sesiune.logat) return <div className="app"><EcranLogin s={sesiune} /></div>
+  const poateConduce = sesiune.roluri.includes('sofer') || sesiune.roluri.includes('admin')
 
   return (
     <div className={`app role-${role}`}>
@@ -81,10 +113,15 @@ export default function App() {
           <button role="tab" aria-selected={role === 'citizen'} onClick={() => setRole('citizen')}>Cetățean</button>
           <button role="tab" aria-selected={role === 'driver'} onClick={() => setRole('driver')}>Șofer</button>
         </div>
+        {sesiune.activ && (
+          <button className="logout" onClick={() => iesi()} aria-label={`Ieși din cont (${sesiune.email})`} title={sesiune.email}>
+            <LogOut size={18} />
+          </button>
+        )}
       </header>
 
       <main className="content">
-        {role === 'citizen' ? <Citizen /> : <Driver key={truckId} truckId={truckId} />}
+        {role === 'citizen' ? <Citizen /> : poateConduce ? <Driver key={truckId} truckId={truckId} /> : <FaraAcces email={sesiune.email} />}
       </main>
     </div>
   )

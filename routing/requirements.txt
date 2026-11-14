@@ -52,3 +52,4 @@ python-dotenv
 pytest
 httpx
 python-multipart
+pyjwt[crypto]

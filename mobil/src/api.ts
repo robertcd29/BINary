@@ -1,13 +1,17 @@
 // Legatura cu serverul de rutare (routing/api.py). Aplicatia e servita de acelasi server,
 // deci implicit vorbeste cu originea de pe care a fost deschisa.
 
+import { antetAuth } from './auth'
+
 export type Role = 'citizen' | 'driver'
 export type Coordinates = { lat: number; lng: number }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || window.location.origin).replace(/\/$/, '')
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, init)
+  // cererile care schimba ceva (POST) merg cu tokenul de login; citirile raman publice
+  const auth = init?.method && init.method !== 'GET' ? await antetAuth() : {}
+  const response = await fetch(`${API_BASE}${path}`, { ...init, headers: { ...(init?.headers || {}), ...auth } })
   if (!response.ok) {
     let detail = `Serverul a răspuns cu HTTP ${response.status}`
     try {

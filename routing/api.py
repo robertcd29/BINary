@@ -29,12 +29,13 @@ sys.path.insert(0, str(HERE))       # modulele din routing/ se importa intre ele
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from PIL import Image
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 import dumping
+from auth import cere_rol
 import routing_engine as engine
 import sensor_filter as sf
 from explain import explain_plan
@@ -444,7 +445,15 @@ def rute(explicatie: bool = False):
         return out
 
 
-@router.post("/demo/reset")
+@router.get("/auth-config")
+def auth_config():
+    """Ce le trebuie paginilor ca sa porneasca loginul Auth0 (nimic secret: domeniul si Client ID sunt publice)."""
+    return {"activ": os.environ.get("AUTH_ACTIV", "false").strip().lower() == "true",
+            "domain": os.environ.get("AUTH0_DOMAIN", ""), "client_id": os.environ.get("AUTH0_CLIENT_ID", ""),
+            "audience": os.environ.get("AUTH0_AUDIENCE", "https://binary-api")}
+
+
+@router.post("/demo/reset", dependencies=[Depends(cere_rol("admin"))])
 def reset_demo():
     """Butonul de reset pentru demo: aduce orasul la starea de dimineata si replanifica.
 
@@ -463,14 +472,14 @@ def reset_demo():
         return _out(_build_plan(conn))
 
 
-@router.post("/rute/planifica")
+@router.post("/rute/planifica", dependencies=[Depends(cere_rol("admin"))])
 def planifica():
     """Planul de dimineata: recalculeaza tot din datele actuale."""
     with _lock, _connect() as conn:
         return _out(_build_plan(conn))
 
 
-@router.post("/pubele/{bin_id}/golita")
+@router.post("/pubele/{bin_id}/golita", dependencies=[Depends(cere_rol("sofer", "admin"))])
 def golita(bin_id: str):
     """Pentru pubelele simulate. Cele reale sunt detectate singure, din scaderea brusca a senzorului."""
     with _lock, _connect() as conn:
@@ -532,7 +541,7 @@ def lista_alerte():
         return conn.execute("SELECT * FROM rutare_alerte ORDER BY creata DESC").fetchall()
 
 
-@router.post("/alerte/{alert_id}/colectata")
+@router.post("/alerte/{alert_id}/colectata", dependencies=[Depends(cere_rol("sofer", "admin"))])
 def alerta_colectata(alert_id: str):
     with _lock, _connect() as conn:
         found = conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
@@ -586,7 +595,7 @@ CAPTURES.mkdir(exist_ok=True)
 STATUS_APLICATIE = {"assigned": "pe_ruta", "duplicat": "duplicat"}
 
 
-@router.post("/rapoarte")
+@router.post("/rapoarte", dependencies=[Depends(cere_rol("cetatean", "sofer", "admin"))])
 def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
     """Gemini verifica poza; daca e gunoi, intra ca orice alerta (duplicate, inserare in ruta)."""
     try:
@@ -708,7 +717,7 @@ class Pozitie(BaseModel):
     lng: float
 
 
-@router.post("/pozitie")
+@router.post("/pozitie", dependencies=[Depends(cere_rol("sofer", "admin"))])
 def pozitie(p: Pozitie):
     """Aplicatia soferului o trimite periodic; dashboard-ul o citeste din GET /pozitii."""
     _state["pozitii"][p.camion] = {"camion": p.camion, "lat": p.lat, "lng": p.lng,
@@ -735,7 +744,7 @@ def compat_trashes():
         return [{k: r[k] for k in ("id", "lat", "lng", "umplere")} for r in _trashes(conn)]
 
 
-@compat.post("/rapoarte")
+@compat.post("/rapoarte", dependencies=[Depends(cere_rol("cetatean", "sofer", "admin"))])
 def compat_rapoarte(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...),
                     descriere: str = Form("")):
     """Aplicatia asteapta {id, status}; filtrul Gemini si alertele sunt cele din /api/rapoarte."""
@@ -745,6 +754,6 @@ def compat_rapoarte(poza: UploadFile = File(...), lat: float = Form(...), lng: f
     return {"id": r["alerta"]["id"], "status": "Acceptată", "descriere": r["descriere"]}
 
 
-@compat.post("/pozitie")
+@compat.post("/pozitie", dependencies=[Depends(cere_rol("sofer", "admin"))])
 def compat_pozitie(p: Pozitie):
     return pozitie(p)

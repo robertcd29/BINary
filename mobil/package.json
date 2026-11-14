@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@auth0/auth0-spa-js": "^2.30.0",
     "@maplibre/maplibre-gl-leaflet": "0.1.4",
     "leaflet": "^1.9.4",
     "leaflet-rotate": "0.2.8",
