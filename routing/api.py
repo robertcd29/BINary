@@ -64,7 +64,11 @@ ZONE = {   # unghiul se masoara de la nord, in sensul acelor de ceasornic
     2: {"nume": "Sud",      "senzor": "TM-015", "de_la": 90,  "pana_la": 210},
 }
 SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
-CAMIOANE_ZONA = {z: [z, z + len(ZONE)] for z in ZONE}   # 6 camioane: 1-3 principale, 4-6 rezerva
+# 6 camioane: TM 01-03 strang deseurile menajere, TM 04-06 reciclabilele; cate unul din fiecare pe zona
+CAMION_MENAJER = {z: z for z in ZONE}
+CAMION_RECICLABIL = {z: z + len(ZONE) for z in ZONE}
+TIP_CAMION = {**{c: "menajer" for c in CAMION_MENAJER.values()}, **{c: "reciclabil" for c in CAMION_RECICLABIL.values()}}
+CAMIOANE_MENAJERE = sorted(CAMION_MENAJER.values())   # depozitarile ilegale le iau doar camioanele menajere
 # soferii isi recunosc camionul dupa numarul de inmatriculare (numere inventate, pentru prototip)
 NUMERE_CAMIOANE = ["TM 01 BIN", "TM 02 BIN", "TM 03 BIN", "TM 04 BIN", "TM 05 BIN", "TM 06 BIN"]
 
@@ -106,7 +110,10 @@ _TM_POZ = {"TM-001": (45.774718, 21.2633061), "TM-002": (45.744593, 21.267267), 
            "TM-016": (45.755, 21.245), "TM-017": (45.7585, 21.224)}
 ZONA_CAMION = {bid: zona_pentru(*p) for bid, p in _TM_POZ.items()}           # ghena -> zona
 ZONA_CAMION.update({bid: zona_pentru(b["lat"], b["lon"]) for bid, b in SIM.items()})
-CAMIOANE_PUBELA = {bid: CAMIOANE_ZONA[z] for bid, z in ZONA_CAMION.items()}
+# ce strange fiecare ghena: o ghena de reciclabile o goleste doar camionul de reciclabile al zonei
+RECICLABILE = {bid for bid, b in SIM.items() if b.get("deseu") == "reciclabil"} | {"TM-015"}
+CAMIOANE_PUBELA = {bid: [CAMION_RECICLABIL[z] if bid in RECICLABILE else CAMION_MENAJER[z]]
+                   for bid, z in ZONA_CAMION.items()}
 
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
@@ -179,9 +186,12 @@ def init_db():
             if conn.execute("SELECT to_regclass('trashes') IS NOT NULL AS ok").fetchone()["ok"]:
                 cur.executemany(
                     """INSERT INTO trashes (id, lat, lng, umplere, actualizat, nume, adresa, tip)
-                       VALUES (%s, %s, %s, %s, now(), %s, %s, 'ghena') ON CONFLICT (id) DO NOTHING""",
-                    [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["nume"], b["adresa"])
-                     for b in sim])
+                       VALUES (%s, %s, %s, %s, now(), %s, %s, %s) ON CONFLICT (id) DO NOTHING""",
+                    [(b["id"], b["lat"], b["lon"], round(b["fill_level"] * 100), b["nume"], b["adresa"],
+                      "ghena_reciclabile" if b.get("deseu") == "reciclabil" else "ghena") for b in sim])
+                cur.executemany("UPDATE trashes SET tip = %s WHERE id = %s",
+                                [("ghena_reciclabile" if b.get("deseu") == "reciclabil" else "ghena", b["id"])
+                                 for b in sim])
 
 
 init_db()
@@ -380,7 +390,8 @@ def _build_plan(conn):
                              ORDER BY creata""").fetchall()
     puncte = [{"id": a["id"], "lat": a["lat"], "lng": a["lng"], "umplere": 100,
                "capacitate_l": a["volum_l"] or engine.ALERT_SIZES_L["medie"]} for a in alerte]
-    plan = engine.plan_routes(bins + puncte, history, compare_baseline=True, zone=CAMIOANE_PUBELA)
+    zone = {**CAMIOANE_PUBELA, **{a["id"]: CAMIOANE_MENAJERE for a in alerte}}
+    plan = engine.plan_routes(bins + puncte, history, compare_baseline=True, zone=zone)
     for bid, s in surse.items():
         if s["sursa"] != "senzor":
             plan["warnings"].append(f"{bid}: {s['motiv']}")
@@ -406,7 +417,7 @@ def _assign(conn, alert):
     if plan is None:
         return {"id": alert["id"], "status": "deschisa", "reason": "inca nu exista un plan al zilei"}
     r = engine.add_alert(plan, {"id": alert["id"], "lat": alert["lat"], "lng": alert["lng"],
-                                "volum_l": alert["volum_l"]})
+                                "volum_l": alert["volum_l"], "camioane": CAMIOANE_MENAJERE})
     status = {"assigned": "asignata", "rejected": "respinsa"}.get(r["status"], "deschisa")
     conn.execute("UPDATE rutare_alerte SET status = %s, camion = %s WHERE id = %s",
                  (status, r.get("truck"), alert["id"]))
@@ -461,7 +472,7 @@ def rute(explicatie: bool = False):
 
 @router.get("/camioane")
 def camioane():
-    return [{"camion": i, "nr": nr} for i, nr in enumerate(NUMERE_CAMIOANE)]
+    return [{"camion": i, "nr": nr, "tip": TIP_CAMION.get(i, "menajer")} for i, nr in enumerate(NUMERE_CAMIOANE)]
 
 
 def _camionul_meu(date):
@@ -631,7 +642,8 @@ def toate_pubelele():
                     "umplere_rutare": b["umplere"],
                     "nume": r.get("nume"), "adresa": r.get("adresa"), "tip": r.get("tip"),
                     "zona": ZONE[ZONA_CAMION[b["id"]]]["nume"] if b["id"] in ZONA_CAMION else None,
-                    "formula": b["id"] in FORMULE})
+                    "formula": b["id"] in FORMULE,
+                    "deseu": "reciclabil" if b["id"] in RECICLABILE else "menajer"})
     return out
 
 

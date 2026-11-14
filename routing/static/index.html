@@ -18,6 +18,7 @@
     <style>
         /* ---------- sistemul vizual BINary: asfalt, hartie, verde-petrol ---------- */
         :root {
+            --recicl: #1d6fd6;
             color-scheme: light;
             --ink: #15191a;
             --ink-2: #3a4240;
@@ -299,6 +300,10 @@
         }
 
         .pubela i { position: absolute; right: 0; bottom: 0; left: 0; }
+
+        /* ghenele de reciclabile: corp albastru, ca sa se vada dintr-o privire */
+        .pubela.reciclabil { background: #e3eefc; border-color: var(--recicl); }
+        .pubela.reciclabil::before { background: var(--recicl); }
 
         .pubela.pe-ruta { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--c, var(--route)); }
         .pubela.offline { opacity: .45; border-style: dashed; }
@@ -773,8 +778,8 @@
 
         const fmt = (n, d = 0) => Number(n).toLocaleString("ro-RO", { maximumFractionDigits: d, minimumFractionDigits: d });
         const culoareUmplere = p => p >= 85 ? "var(--full)" : p >= 60 ? "var(--warn)" : "var(--ok)";
-        let NUMERE = [];                        // numerele de inmatriculare, de la /api/camioane
-        fetch("/api/camioane").then(r => r.json()).then(c => { NUMERE = c.map(x => x.nr); try { deseneazaTot(); } catch { /* datele vin la urmatoarea actualizare */ } }).catch(() => {});
+        let NUMERE = [], TIPURI = [];           // numerele de inmatriculare si ce strange fiecare camion
+        fetch("/api/camioane").then(r => r.json()).then(c => { NUMERE = c.map(x => x.nr); TIPURI = c.map(x => x.tip); try { deseneazaTot(); } catch { /* datele vin la urmatoarea actualizare */ } }).catch(() => {});
         const numeCamion = t => NUMERE[t] || `Camion ${t + 1}`;
 
         function timpTrecut(iso) {
@@ -826,7 +831,8 @@
             d.innerHTML = `<span><i style="background:var(--ok)"></i>sub 60%</span>
                 <span><i style="background:var(--warn)"></i>60–85%</span>
                 <span><i style="background:var(--full)"></i>peste 85%</span>
-                <span><i style="background:var(--dump);border-radius:50%"></i>depozitare ilegală</span>`;
+                <span><i style="background:var(--dump);border-radius:50%"></i>depozitare ilegală</span>
+                <span><i style="background:#e3eefc;border:2px solid var(--recicl)"></i>ghenă reciclabile</span>`;
             return d;
         };
         legenda.addTo(harta);
@@ -850,7 +856,8 @@
         // ---------- desen: pubele ----------
         function iconPubela(p, oprire) {
             const u = Math.max(0, Math.min(100, Math.round(p.umplere ?? 0)));
-            const cls = ["pubela", oprire ? "pe-ruta" : "", p.pe_ruta_posibil === false ? "offline" : ""].join(" ");
+            const cls = ["pubela", oprire ? "pe-ruta" : "", p.pe_ruta_posibil === false ? "offline" : "",
+                         p.deseu === "reciclabil" ? "reciclabil" : ""].join(" ");
             const c = oprire ? `--c:${CULORI[oprire.truck % CULORI.length]}` : "";
             return L.divIcon({
                 className: "",
@@ -863,7 +870,7 @@
             const d = el("div");
             d.append(el("b", "", p.nume || p.id));
             if (p.adresa) d.append(el("div", "m", p.adresa));
-            d.append(el("div", "", `Umplere ${Math.round(p.umplere ?? 0)}%`));
+            d.append(el("div", "", `${p.deseu === "reciclabil" ? "Reciclabile" : "Menajer"} · umplere ${Math.round(p.umplere ?? 0)}%`));
             if (oprire) d.append(el("div", "", `${numeCamion(oprire.truck)} · oprirea ${oprire.i} din ${oprire.n}`));
             if (pred?.hours_to_full != null && pred.hours_to_full < 72) d.append(el("div", "m", `Se umple în ~${fmt(pred.hours_to_full)} h`));
             if (p.pe_ruta_posibil === false) d.append(el("div", "m", "Prea departe de rețeaua rutieră din hartă"));
@@ -988,7 +995,7 @@
                 const b = el("button", "row truck");
                 b.style.setProperty("--c", c);
                 b.append(el("span", "truck-bar"));
-                b.append(el("span", "truck-name", numeCamion(r.truck)));
+                b.append(el("span", "truck-name", `${numeCamion(r.truck)}${TIPURI[r.truck] === "reciclabil" ? " · Reciclabile" : " · Menajer"}`));
                 b.append(el("span", `truck-state${live ? " live" : ""}`,
                     !opriri.length ? "În depou" : live ? `GPS ${timpTrecut(poz.la)}` : "Fără GPS"));
                 const meta = el("span", "truck-meta");

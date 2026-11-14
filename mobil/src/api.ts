@@ -35,6 +35,7 @@ export type Bin = {
   nume: string | null
   adresa: string | null
   pe_ruta_posibil?: boolean
+  deseu?: 'menajer' | 'reciclabil'
 }
 
 export const getBins = () => apiRequest<Bin[]>('/api/pubele')

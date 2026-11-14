@@ -15,7 +15,7 @@ function pin(b: Bin, selected: boolean) {
   const u = Math.round(b.umplere ?? 0)
   return L.divIcon({
     className: '',
-    html: `<div class="bin-pin${selected ? ' selected' : ''}" style="--c:${fillColor(u)}"><i></i>${u}%</div>`,
+    html: `<div class="bin-pin${selected ? ' selected' : ''}${b.deseu === 'reciclabil' ? ' reciclabil' : ''}" style="--c:${fillColor(u)}"><i></i>${b.deseu === 'reciclabil' ? '♻ ' : ''}${u}%</div>`,
     iconSize: [52, 26],
     iconAnchor: [26, 26]
   })
@@ -98,6 +98,7 @@ export default function NearbyMap({ geo }: { geo: GeoState }) {
           <>
             <div className="sheet-eyebrow">
               {isNearest ? (geo.position ? 'Cea mai apropiată ghenă cu loc' : 'Ghena cu cel mai mult loc') : 'Ghenă selectată'}
+              {selected.deseu === 'reciclabil' ? ' · reciclabile' : ' · menajer'}
             </div>
             <div className="sheet-row">
               <div className="sheet-main">

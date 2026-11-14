@@ -23,7 +23,6 @@ from predict import estimate
 GRAPH_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "timisoara_drive.graphml")
 DEPOT = {"lat": 45.7547817, "lng": 21.2506284}   # punctul de plecare al camioanelor
 NUM_TRUCKS = 6
-REZERVA_COST_M = 5000           # cost fix (in metri) pentru a folosi un camion de rezerva
 TRUCK_CAPACITY_L = 8000
 RESERVE = 0.10
 MANDATORY_FILL = 0.85            # la fel ca rosul de pe harta (peste 85%)
@@ -427,9 +426,6 @@ def _solve(M, demands, penalties, capacity, seconds, greedy=False, zone=None):
         demand_idx, 0, [capacity] * NUM_TRUCKS, True, "Capacity")
     for node, penalty in penalties.items():
         routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
-    # camioanele de rezerva (a doua jumatate) pleaca doar cand cele principale nu mai au loc
-    for v in range(NUM_TRUCKS // 2, NUM_TRUCKS):
-        routing.SetFixedCostOfVehicle(REZERVA_COST_M, v)
     for node, trucks in (zone or {}).items():
         # -1 = sarita; altfel doar camioanele zonei
         routing.VehicleVar(manager.NodeToIndex(node)).SetValues([-1, *trucks])
