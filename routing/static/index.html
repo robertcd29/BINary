@@ -834,7 +834,7 @@
                 <span><i style="background:var(--dump);border-radius:50%"></i>depozitare ilegală</span>
                 <span><i style="background:#fff;border:2px solid var(--ink)"></i>ghenă menajer</span>
                 <span><i style="background:#fff;border:2px solid var(--recicl)"></i>ghenă reciclabile</span>
-                <span><i style="width:18px;height:0;border-top:3px dashed var(--ink);border-radius:0"></i>rută reciclabile</span>`;
+                <span><i style="width:20px;height:7px;border-radius:4px;background:linear-gradient(var(--ink) 0 2.5px, #fff 2.5px 4.5px, var(--ink) 4.5px)"></i>rută reciclabile</span>`;
             return d;
         };
         legenda.addTo(harta);
@@ -901,13 +901,15 @@
                 const c = CULORI[r.truck % CULORI.length];
                 const slaba = rutaEvidentiata != null && rutaEvidentiata !== r.truck;
                 const casing = L.polyline(r.geometry, { color: "#fff", weight: 9, opacity: slaba ? .3 : .95 }).addTo(stratRute);
-                // rutele de reciclabile: linie intrerupta (tipul vine cu ruta, de la server)
+                // rutele de reciclabile: linie dubla (cu o dunga alba pe mijloc). O linie intrerupta nu merge:
+                // unde camionul trece de doua ori pe aceeasi strada (dus-intors), liniutele se suprapun si par continue
                 const recicl = (r.tip || TIPURI[r.truck]) === "reciclabil";
-                const linie = L.polyline(r.geometry, { color: c, weight: rutaEvidentiata === r.truck ? 6 : 4.5, opacity: slaba ? .25 : 1,
-                                                       dashArray: recicl ? "10 8" : null, lineCap: recicl ? "butt" : "round" })
+                const gros = rutaEvidentiata === r.truck ? 7 : recicl ? 6 : 4.5;
+                const linie = L.polyline(r.geometry, { color: c, weight: gros, opacity: slaba ? .25 : 1 })
                     .bindTooltip(`${numeCamion(r.truck)} · ${recicl ? "Reciclabile" : "Menajer"} · ${fmt(r.distance_m / 1000, 1)} km`, { sticky: true, className: "tip" })
                     .addTo(stratRute);
-                liniiRute[r.truck] = [casing, linie];
+                const dunga = recicl ? L.polyline(r.geometry, { color: "#fff", weight: 2, opacity: slaba ? .3 : 1, interactive: false }).addTo(stratRute) : null;
+                liniiRute[r.truck] = [casing, linie, dunga].filter(Boolean);
             });
             const depou = plan.routes[0]?.geometry[0];
             if (depou) {
