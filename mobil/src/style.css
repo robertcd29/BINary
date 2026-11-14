@@ -644,9 +644,9 @@ h1, h2 { margin: 0; }
 .map-panel.tilted .leaflet-container {
   top: auto;
   bottom: 0;
-  left: -80%;
-  width: 260%;
-  height: 220%;
+  left: -60%;
+  width: 220%;
+  height: 190%;
   transform: rotateX(55deg);
 }
 

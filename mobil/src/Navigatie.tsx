@@ -154,6 +154,11 @@ export function speak(text: string) {
 
 export type NavState = ReturnType<typeof useNavigation>
 
+// pe iPhone vederea 3D (harta culcata cu CSS) cere multa memorie: pornim in 2D si nu reluam singuri 3D
+// dupa o reincarcare, ca un telefon care nu o duce sa nu intre intr-o bucla de blocari
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+const DEFAULT_VIEW: ViewMode = IOS ? '2d' : '3d'
+
 type SavedNav = { started: boolean; voice: boolean; viewMode: ViewMode; at: number }
 const navKey = (truckId: string) => `binary.navigatie.${truckId}`
 function loadSaved(truckId: string): SavedNav | null {
@@ -177,7 +182,8 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   const [simPos, setSimPos] = useState<Coordinates | null>(null)
 
   // 3d = inclinata si rotita ca la Waze, 2d = rotita pe directia de mers, nord = nordul in sus
-  const [viewMode, setViewMode] = useState<ViewMode>(saved?.viewMode ?? '3d')
+  const [viewMode, setViewMode] = useState<ViewMode>(
+    saved?.viewMode && !(IOS && saved.viewMode === '3d') ? saved.viewMode : DEFAULT_VIEW)
   const lastHeading = useRef(0)
 
   const position = simulating ? simPos : gps
@@ -510,7 +516,7 @@ export function NavLayer({ n }: { n: NavState }) {
   const map = useMap() as RotatableMap
   const latest = useRef(n)
   latest.current = n
-  const cam = useRef({ pos: null as Coordinates | null, heading: 0, bearing: 0, center: '' })
+  const cam = useRef({ pos: null as Coordinates | null, heading: 0, bearing: 0, last: null as Coordinates | null, size: 0 })
   const zoomed = useRef(false)
 
   useEffect(() => {
@@ -557,7 +563,8 @@ export function NavLayer({ n }: { n: NavState }) {
       // rotirea hartii: legata de directia lina a camionului, sau revine lin la nord
       const want = s.rotated ? -c.heading : 0
       const nb = s.rotated ? want : c.bearing + angleDelta(c.bearing, want) * (1 - Math.exp(-dt / NORTH_SMOOTH_S))
-      if (Math.abs(angleDelta(c.bearing, nb)) > 0.01) {
+      // sub 0,2 grade nu se vede: nu mai redesenam harta pentru atat (pe telefon conteaza)
+      if (Math.abs(angleDelta(c.bearing, nb)) > 0.2) {
         c.bearing = nb
         map.setBearing?.(nb)
       }
@@ -576,9 +583,11 @@ export function NavLayer({ n }: { n: NavState }) {
           : s.rotated ? (TRUCK_SCREEN_Y - 0.5) * size.y : 0
         const mPerPx = (156_543.03 * Math.cos((c.pos.lat * Math.PI) / 180)) / 2 ** map.getZoom()
         const center = shiftPx ? ahead(c.pos, -c.bearing, shiftPx * mPerPx) : c.pos
-        const key = `${center.lat.toFixed(7)},${center.lng.toFixed(7)},${size.y}`
-        if (key !== c.center) {
-          c.center = key
+        // harta se muta doar cand diferenta se vede (peste ~0,5 px), nu la fiecare cadru
+        const last = c.last
+        if (!last || c.size !== size.y || meters([last.lat, last.lng], [center.lat, center.lng]) > 0.5 * mPerPx) {
+          c.last = center
+          c.size = size.y
           map.setView([center.lat, center.lng], map.getZoom(), { animate: false })
         }
       }

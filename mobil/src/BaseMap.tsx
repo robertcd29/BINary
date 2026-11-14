@@ -34,20 +34,43 @@ const Base: new (options: object) => L.Layer = (L as unknown as { MaplibreGL: ty
   },
 })
 
+// Cati pixeli are voie sa aiba canvas-ul hartii. Pe telefon (mai ales iPhone) un canvas WebGL prea mare,
+// redesenat la fiecare cadru, umple memoria paginii si Safari o inchide ("A problem repeatedly occurred").
+// Vederea 3D face harta de cateva ori mai mare decat ecranul, deci acolo rezolutia scade automat.
+const MOBILE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+const MAX_CANVAS_PX = MOBILE ? 3.5e6 : 10e6
+
+type LayerWithGl = L.Layer & { getSize(): L.Point; getMaplibreMap(): { setPixelRatio(r: number): void } | undefined }
+
+function pixelRatioFor(size: L.Point) {
+  const css = Math.max(1, size.x * size.y)
+  return Math.max(0.6, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(MAX_CANVAS_PX / css)))
+}
+
 /** padding = cat de mare e harta fata de ecran, pe fiecare latura (o harta rotita are nevoie de mai mult). */
 export default function BaseMap({ padding = 0.1 }: { padding?: number }) {
   const map = useMap()
   useEffect(() => {
+    const size = map.getSize().multiplyBy(1 + padding * 2)
+    let ratio = pixelRatioFor(size)
     const layer = new Base({
       style: MAP_STYLE,
       padding,
       updateInterval: 16,
       attribution: ATTRIBUTION,
       attributionControl: { customAttribution: ATTRIBUTION },
-      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
-    })
+      pixelRatio: ratio,
+    }) as LayerWithGl
     layer.addTo(map)
-    return () => { map.removeLayer(layer) }
+    // harta isi schimba marimea (navigatie pe tot ecranul, vederea 3D): rezolutia se potriveste din nou
+    const adjust = () => {
+      const r = pixelRatioFor(layer.getSize())
+      if (Math.abs(r - ratio) < 0.05) return
+      ratio = r
+      try { layer.getMaplibreMap()?.setPixelRatio(r) } catch { /* harta inca se incarca */ }
+    }
+    map.on('resize', adjust)
+    return () => { map.off('resize', adjust); map.removeLayer(layer) }
   }, [map, padding])
   return null
 }
