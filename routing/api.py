@@ -17,6 +17,7 @@ Fluxul zilei:
 import os
 import sys
 import json
+import math
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,17 +53,46 @@ RAPORTARE_PCT = 5               # o schimbare de umplere de cel putin 5 puncte a
 FOLOSESTE_SIMULATE = True       # True = pe langa ghenele din trashes, si cele 60 de ghene simulate din sim_bins.json
 
 # ---------- zone si pubele cu formula (doar pentru prototip) ----------
-# Orasul e impartit in 3 zone, fiecare cu camionul ei si cu un senzor real.
-ZONE = {
-    0: {"nume": "Vest", "senzor": "TM-011", "pubele": ["TM-003", "TM-005", "TM-010", "TM-012", "TM-013", "TM-014"]},
-    1: {"nume": "Nord", "senzor": "TM-015", "pubele": ["TM-004", "TM-006", "TM-007", "TM-008", "TM-009"]},
-    2: {"nume": "Est",  "senzor": "TM-016", "pubele": ["TM-001", "TM-002", "TM-017"]},
+# Orasul e impartit in 3 sectoare pornind din centru (ca feliile unui tort), fiecare cu
+# camioanele lui si cu un senzor real. O ghena intra in sectorul directiei in care se afla
+# fata de centru, deci fiecare zona e compacta si rutele nu traverseaza orasul.
+CENTRU = (45.748, 21.235)
+ZONE = {   # unghiul se masoara de la nord, in sensul acelor de ceasornic
+    0: {"nume": "Vest",     "senzor": "TM-011", "de_la": 210, "pana_la": 330},
+    1: {"nume": "Nord-Est", "senzor": "TM-016", "de_la": 330, "pana_la": 90},
+    2: {"nume": "Sud",      "senzor": "TM-015", "de_la": 90,  "pana_la": 210},
 }
-ZONA_CAMION = {bid: z for z, d in ZONE.items() for bid in [d["senzor"], *d["pubele"]]}   # ghena -> zona
-CAMIOANE_ZONA = {z: [z, z + len(ZONE)] for z in ZONE}   # 6 camioane, cate 2 pe zona
+SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
+CAMIOANE_ZONA = {z: [z, z + len(ZONE)] for z in ZONE}   # 6 camioane: 1-3 principale, 4-6 rezerva
 
-# ghenele simulate, raspandite pe toata harta (vezi generate_sim_bins.py); fiecare intra in zona
-# ghenei reale celei mai apropiate, ca zonele sa ramana compacte
+
+def zona_pentru(lat, lng):
+    """Sectorul in care cade un punct, dupa directia lui fata de centru."""
+    dy = lat - CENTRU[0]
+    dx = (lng - CENTRU[1]) * math.cos(math.radians(CENTRU[0]))
+    unghi = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+    for z, d in ZONE.items():
+        if d["de_la"] <= d["pana_la"]:
+            if d["de_la"] <= unghi < d["pana_la"]:
+                return z
+        elif unghi >= d["de_la"] or unghi < d["pana_la"]:   # sectorul care trece prin nord
+            return z
+    return 0
+
+
+# Unele pubele hardcodate isi iau umplerea dintr-o formula aplicata pe senzorul zonei lor,
+# ca sa se miste odata cu senzorii reali. Formule diferite, ca sa nu se miste toate la fel.
+FORMULE = {
+    "TM-012": ("TM-011", lambda x: 100 - x),          # Vest
+    "TM-005": ("TM-011", lambda x: 0.6 * x + 30),     # Vest
+    "TM-006": ("TM-011", lambda x: 0.4 * x + 50),     # Vest
+    "TM-017": ("TM-011", lambda x: 0.7 * x + 20),     # Vest
+    "TM-001": ("TM-016", lambda x: 100 - x),          # Nord-Est
+    "TM-008": ("TM-016", lambda x: 0.5 * x + 40),     # Nord-Est
+    "TM-002": ("TM-015", lambda x: 100 - x),          # Sud
+}
+
+# ghenele simulate, raspandite pe toata harta (vezi generate_sim_bins.py)
 with open(HERE / "sim_bins.json") as f:
     SIM = {b["id"]: b for b in json.load(f)["bins"]}
 _TM_POZ = {"TM-001": (45.774718, 21.2633061), "TM-002": (45.744593, 21.267267), "TM-003": (45.7121271, 21.198657),
@@ -71,22 +101,9 @@ _TM_POZ = {"TM-001": (45.774718, 21.2633061), "TM-002": (45.744593, 21.267267), 
            "TM-010": (45.7588, 21.2135), "TM-011": (45.746, 21.224), "TM-012": (45.7482, 21.2045),
            "TM-013": (45.748, 21.204), "TM-014": (45.7485, 21.205), "TM-015": (45.743, 21.237),
            "TM-016": (45.755, 21.245), "TM-017": (45.7585, 21.224)}
-for _b in SIM.values():
-    _cel = min(_TM_POZ, key=lambda t: engine._m(_TM_POZ[t], (_b["lat"], _b["lon"])))
-    ZONA_CAMION[_b["id"]] = ZONA_CAMION[_cel]
+ZONA_CAMION = {bid: zona_pentru(*p) for bid, p in _TM_POZ.items()}           # ghena -> zona
+ZONA_CAMION.update({bid: zona_pentru(b["lat"], b["lon"]) for bid, b in SIM.items()})
 CAMIOANE_PUBELA = {bid: CAMIOANE_ZONA[z] for bid, z in ZONA_CAMION.items()}
-SENZORI = {d["senzor"] for d in ZONE.values()}   # doar ele au citiri reale, deci predictie de umplere
-
-# Unele pubele hardcodate isi iau umplerea dintr-o formula aplicata pe senzorul zonei lor,
-# ca sa se miste odata cu senzorii reali. Formule diferite, ca sa nu se miste toate la fel.
-FORMULE = {
-    "TM-012": ("TM-011", lambda x: 100 - x),
-    "TM-005": ("TM-011", lambda x: 0.6 * x + 30),
-    "TM-006": ("TM-015", lambda x: 100 - x),
-    "TM-008": ("TM-015", lambda x: 0.5 * x + 40),
-    "TM-002": ("TM-016", lambda x: 100 - x),
-    "TM-017": ("TM-016", lambda x: 0.7 * x + 20),
-}
 
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
