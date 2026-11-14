@@ -9,11 +9,11 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg'],
       manifest: {
-        name: 'BINary – aplicație mobilă',
+        name: 'BINary',
         short_name: 'BINary',
         description: 'Raportare și colectare inteligentă a deșeurilor',
-        theme_color: '#123b32',
-        background_color: '#f5f7f3',
+        theme_color: '#142536',
+        background_color: '#F4F7FA',
         display: 'standalone',
         start_url: '/',
         icons: [
