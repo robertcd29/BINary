@@ -31,7 +31,8 @@ check("coordonate lipsa: raportate, restul merge", any("X" in w for w in p["warn
 p = re_.plan_routes([{**bins[0], "umplere": 140}])
 check("umplere peste 100: limitata", any("limitata" in w for w in p["warnings"]))
 
-full = [{**b, "umplere": 100} for b in bins]          # 60 pubele pline, nu pot incapea toate
+# 60 pubele pline, de doua ori mai mari decat in realitate: ~73.500 L, peste cei 48.000 L ai flotei
+full = [{**b, "umplere": 100, "capacitate_l": b["capacitate_l"] * 2} for b in bins]
 p = re_.plan_routes(full)
 check("prea mult gunoi obligatoriu: plan partial, nu eroare",
       "routes" in p and p["metrics"]["mandatory_unserved"] > 0)
