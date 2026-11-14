@@ -203,7 +203,7 @@ def _poll(conn):
         # dupa repornire pornim de la valorile curente: planul le ia oricum, deci fara evenimente false
         vals = {r["id"]: sf.valid(r["umplere"]) for r in rows}
         _state["raportat"] = {k: v for k, v in vals.items() if v is not None}
-        _state["urgent"] = {k: v > engine.MIN_FILL * 100 for k, v in _state["raportat"].items()}
+        _state["urgent"] = {k: v >= engine.MANDATORY_FILL * 100 for k, v in _state["raportat"].items()}
     for r in rows:
         ts, bid = r["actualizat"], r["id"]
         if ts is None or (bid in seen and ts <= seen[bid]):
@@ -230,9 +230,9 @@ def _poll(conn):
             if last is not None and emptied is None:
                 events.append(_event({"id": bid, "status": "citire", "umplere": round(value),
                                       "inainte": round(last)}))
-        # orice ghena care primeste deseuri intra pe ruta, la fel ca in planul de dimineata
+        # o ghena care trece de pragul de umplere obligatorie intra pe ruta din mers
         was = _state["urgent"].get(bid, False)
-        urgent = value > engine.MIN_FILL * 100
+        urgent = value >= engine.MANDATORY_FILL * 100
         _state["urgent"][bid] = urgent
         if urgent and not was and emptied is None:
             events.append(_became_urgent(r, value))

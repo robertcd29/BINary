@@ -26,9 +26,9 @@ NUM_TRUCKS = 3
 TRUCK_CAPACITY_L = 8000
 RESERVE = 0.10
 MANDATORY_FILL = 0.8
-MIN_FILL = 0.0                   # se colecteaza toate pubelele cu umplere peste acest prag
+MIN_FILL = 0.3                   # sub acest prag pubela nu merita drumul (afara de risc de revarsare)
 HORIZON_H = 24
-PENALTY_SCALE = 4000
+PENALTY_SCALE = 4000             # ocolul acceptat (m) pentru o pubela optionala = PENALTY_SCALE * umplere^2
 MANDATORY_PENALTY = 10_000_000   # "obligatoriu": sarirea costa cat 10.000 km
 DEFAULT_BIN_CAPACITY_L = 1100
 MAX_SNAP_M = 300                 # peste aceasta distanta, punctul e in afara hartii
@@ -496,12 +496,16 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         will_overflow = hours_to_full is not None and hours_to_full <= HORIZON_H
         if will_overflow:
             overflow_risk.add(node)
-        if fill > MIN_FILL:
-            # orice pubela care are ceva in ea se colecteaza
+        if fill >= MANDATORY_FILL or will_overflow:
+            # plina sau se umple in urmatoarele 24 h: se colecteaza sigur
             mandatory.add(node)
             penalties[node] = MANDATORY_PENALTY     # o sare doar daca nu incape in camioane
+        elif fill >= MIN_FILL:
+            # optionala: o ia doar daca ocolul e mic fata de cat de plina e
+            # (50% -> pana la ~1 km ocol, 70% -> pana la ~2 km)
+            penalties[node] = int(PENALTY_SCALE * fill ** 2)
         else:
-            penalties[node] = 0                     # goala: nu merita drumul
+            penalties[node] = 0                     # aproape goala: nu merita drumul
 
     capacity = int(TRUCK_CAPACITY_L * (1 - RESERVE))
     zone_idx = {i: zone[b] for i, b in enumerate(ids) if zone and b in zone and 0 <= zone[b] < NUM_TRUCKS}
