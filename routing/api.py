@@ -51,6 +51,26 @@ MAX_EVENTS = 50
 RAPORTARE_PCT = 5               # o schimbare de umplere de cel putin 5 puncte apare in fluxul live
 FOLOSESTE_SIMULATE = False      # True = pe langa ghenele din trashes, si cele 60 de pubele din bins.json
 
+# ---------- zone si pubele cu formula (doar pentru prototip) ----------
+# Orasul e impartit in 3 zone, fiecare cu camionul ei si cu un senzor real.
+ZONE = {
+    0: {"nume": "Vest", "senzor": "TM-011", "pubele": ["TM-003", "TM-005", "TM-010", "TM-012", "TM-013", "TM-014"]},
+    1: {"nume": "Nord", "senzor": "TM-015", "pubele": ["TM-004", "TM-006", "TM-007", "TM-008", "TM-009"]},
+    2: {"nume": "Est",  "senzor": "TM-016", "pubele": ["TM-001", "TM-002", "TM-017"]},
+}
+ZONA_CAMION = {bid: z for z, d in ZONE.items() for bid in [d["senzor"], *d["pubele"]]}
+
+# Unele pubele hardcodate isi iau umplerea dintr-o formula aplicata pe senzorul zonei lor,
+# ca sa se miste odata cu senzorii reali. Formule diferite, ca sa nu se miste toate la fel.
+FORMULE = {
+    "TM-012": ("TM-011", lambda x: 100 - x),
+    "TM-005": ("TM-011", lambda x: 0.6 * x + 30),
+    "TM-006": ("TM-015", lambda x: 100 - x),
+    "TM-008": ("TM-015", lambda x: 0.5 * x + 40),
+    "TM-002": ("TM-016", lambda x: 100 - x),
+    "TM-017": ("TM-016", lambda x: 0.7 * x + 20),
+}
+
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
 _state = {"plan": None, "bins": None, "surse": {}, "urgent": {}, "seen": None, "evenimente": [],
@@ -63,6 +83,25 @@ with open(HERE / "history.json") as f:
 
 SINCE_EMPTY = """LEFT JOIN rutare_golire g ON g.bin_id = c.bin_id
                  WHERE c.ts >= coalesce(g.golita_la, '-infinity')"""
+
+
+def _trashes(conn):
+    """Randurile din trashes, cu umplerea pubelelor din FORMULE calculata din senzorul lor."""
+    if not _has_trashes(conn):
+        return []
+    rows = [dict(r) for r in conn.execute("SELECT * FROM trashes ORDER BY id").fetchall()]
+    by_id = {r["id"]: r for r in rows}
+    for r in rows:
+        if r["id"] not in FORMULE:
+            continue
+        sid, f = FORMULE[r["id"]]
+        src = by_id.get(sid)
+        x = None if src is None else sf.valid(src["umplere"])
+        if x is None:
+            continue                     # senzor lipsa sau citire invalida: ramane valoarea fixa
+        r["umplere"] = round(min(max(f(x), 0), 100))
+        r["actualizat"] = src["actualizat"]   # o citire noua a senzorului = o citire noua aici
+    return rows
 
 
 def _connect():
@@ -146,7 +185,8 @@ def _became_urgent(bin_row, level):
     if bid not in plan["skipped"]:
         return _event({"id": bid, "status": "urgenta", "reason": "e deja pe o ruta"})
     r = engine.add_alert(plan, {"id": bid, "lat": bin_row["lat"], "lng": bin_row["lng"],
-                                "volum_l": round(engine.DEFAULT_BIN_CAPACITY_L * level / 100)}, kind="bin")
+                                "volum_l": round(engine.DEFAULT_BIN_CAPACITY_L * level / 100),
+                                "camion": ZONA_CAMION.get(bid)}, kind="bin")
     return _event(r)
 
 
@@ -158,7 +198,7 @@ def _poll(conn):
         _state["seen"] = {r["bin_id"]: r["ts"] for r in conn.execute(
             "SELECT bin_id, max(ts) AS ts FROM rutare_citiri GROUP BY bin_id").fetchall()}
     seen, events = _state["seen"], []
-    rows = conn.execute("SELECT id, lat, lng, umplere, actualizat FROM trashes ORDER BY id").fetchall()
+    rows = _trashes(conn)
     if _state["raportat"] is None:
         # dupa repornire pornim de la valorile curente: planul le ia oricum, deci fara evenimente false
         vals = {r["id"]: sf.valid(r["umplere"]) for r in rows}
@@ -231,8 +271,7 @@ def _db_history(conn):
 
 def _current_bins(conn):
     """Pubelele reale (trashes, cu umplerea filtrata) plus cele simulate."""
-    real = conn.execute("SELECT id, lat, lng, umplere, actualizat FROM trashes ORDER BY id").fetchall() \
-        if _has_trashes(conn) else []
+    real = _trashes(conn)
     real_ids = {r["id"] for r in real}
     sim = [r for r in conn.execute(
         "SELECT id, lat, lng, umplere, capacitate_l FROM rutare_pubele ORDER BY id").fetchall()
@@ -284,7 +323,7 @@ def _public(plan):
 def _build_plan(conn):
     _poll(conn)                     # planul porneste de la cele mai noi valori din trashes
     bins, history, surse = _current_bins(conn)
-    plan = engine.plan_routes(bins, history, compare_baseline=True)
+    plan = engine.plan_routes(bins, history, compare_baseline=True, zone=ZONA_CAMION)
     for bid, s in surse.items():
         if s["sursa"] != "senzor":
             plan["warnings"].append(f"{bid}: {s['motiv']}")
@@ -423,7 +462,7 @@ def pubele_fizice():
     with _connect() as conn:
         if not _has_trashes(conn):
             return []
-        return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
+        return [{k: r[k] for k in ("id", "lat", "lng", "umplere")} for r in _trashes(conn)]
 
 
 @router.get("/pubele")
@@ -431,8 +470,7 @@ def toate_pubelele():
     """Pubelele reale si cele simulate, cu umplerea curenta, pentru harta din dashboard."""
     with _connect() as conn:
         bins, _, surse = _current_bins(conn)
-        info = {r["id"]: r for r in conn.execute("SELECT * FROM trashes").fetchall()} \
-            if _has_trashes(conn) else {}
+        info = {r["id"]: r for r in _trashes(conn)}
     out = []
     for b in bins:
         try:
@@ -447,7 +485,9 @@ def toate_pubelele():
                     # valoarea filtrata (b["umplere"]), ca o citire gresita sa nu trimita un camion degeaba
                     "umplere": r.get("umplere", b["umplere"]),
                     "umplere_rutare": b["umplere"],
-                    "nume": r.get("nume"), "adresa": r.get("adresa"), "tip": r.get("tip")})
+                    "nume": r.get("nume"), "adresa": r.get("adresa"), "tip": r.get("tip"),
+                    "zona": ZONE[ZONA_CAMION[b["id"]]]["nume"] if b["id"] in ZONA_CAMION else None,
+                    "formula": b["id"] in FORMULE})
     return out
 
 
@@ -602,7 +642,7 @@ def compat_trashes():
     with _connect() as conn:
         if not _has_trashes(conn):
             return []
-        return conn.execute("SELECT id, lat, lng, umplere FROM trashes ORDER BY id").fetchall()
+        return [{k: r[k] for k in ("id", "lat", "lng", "umplere")} for r in _trashes(conn)]
 
 
 @compat.post("/rapoarte")

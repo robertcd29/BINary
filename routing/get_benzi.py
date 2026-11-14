@@ -7,7 +7,7 @@ import urllib.parse
 import urllib.request
 
 QUERY = """[out:json][timeout:90];
-way["highway"]["highway"!~"footway|path|cycleway|steps|pedestrian|service|track"](45.72,21.19,45.78,21.27)->.w;
+way["highway"]["highway"!~"footway|path|cycleway|steps|pedestrian|service|track"](45.70,21.185,45.79,21.28)->.w;
 (way.w[~"^turn:lanes"~"."];way.w[~"^lanes"~"."];);
 out tags;"""
 KEYS = ("lanes", "lanes:forward", "lanes:backward", "turn:lanes", "turn:lanes:forward", "turn:lanes:backward", "oneway")

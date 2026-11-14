@@ -408,8 +408,10 @@ def _clean_bins(bins, warnings):
 
 # ---------- solver ----------
 
-def _solve(M, demands, penalties, capacity, seconds, greedy=False):
+def _solve(M, demands, penalties, capacity, seconds, greedy=False, zone=None):
     """VRP cu capacitate. penalties = {index: penalitate}; fiecare pubela poate fi sarita contra penalitatii ei.
+
+    zone = {index: camion}: pubela poate fi colectata doar de camionul zonei ei (optional).
 
     greedy=True: fara optimizare, doar "mergi la cea mai apropiata pubela" (cum ar face un sofer fara aplicatie).
     """
@@ -424,6 +426,9 @@ def _solve(M, demands, penalties, capacity, seconds, greedy=False):
         demand_idx, 0, [capacity] * NUM_TRUCKS, True, "Capacity")
     for node, penalty in penalties.items():
         routing.AddDisjunction([manager.NodeToIndex(node)], penalty)
+    for node, truck in (zone or {}).items():
+        # -1 = sarita; altfel doar camionul zonei
+        routing.VehicleVar(manager.NodeToIndex(node)).SetValues([-1, truck])
 
     params = pywrapcp.DefaultRoutingSearchParameters()
     params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -464,7 +469,8 @@ def _empty_plan(depot, warnings):
 
 # ---------- API public ----------
 
-def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECONDS):
+def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECONDS, zone=None):
+    """zone = {id pubela: camion}, optional: fiecare camion colecteaza doar pubelele zonei lui."""
     history = history or {}
     warnings = []
     depot, _ = _snap(DEPOT["lat"], DEPOT["lng"])
@@ -498,7 +504,8 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
             penalties[node] = 0                     # goala: nu merita drumul
 
     capacity = int(TRUCK_CAPACITY_L * (1 - RESERVE))
-    routes, total, visited = _solve(M, demands, penalties, capacity, seconds)
+    zone_idx = {i: zone[b] for i, b in enumerate(ids) if zone and b in zone and 0 <= zone[b] < NUM_TRUCKS}
+    routes, total, visited = _solve(M, demands, penalties, capacity, seconds, zone=zone_idx)
     for r in routes:
         r["stops"] = [ids[i] for i in r["stops"]]
         r["geometry"] = _geometry([stops[ids.index(s)] for s in r["stops"]])
@@ -519,10 +526,10 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     if compare_baseline:
         # referinta = colectarea tuturor pubelelor fara optimizare (din aproape in aproape, cum ar
         # face un sofer fara aplicatie); o calculam o data pentru acelasi set de pubele
-        key = tuple(ids)
+        key = (tuple(ids), tuple(sorted(zone_idx.items())))
         if key not in _baseline_cache:
             base = _solve(M, demands, {i: MANDATORY_PENALTY for i in range(1, len(ids))},
-                          TRUCK_CAPACITY_L, BASELINE_SECONDS, greedy=True)
+                          TRUCK_CAPACITY_L, BASELINE_SECONDS, greedy=True, zone=zone_idx)
             _baseline_cache[key] = base[1]
         metrics["baseline_km"] = round(_baseline_cache[key] / 1000, 2)
         metrics["saving_pct"] = round(100 * (1 - total / _baseline_cache[key]), 1)
@@ -574,6 +581,8 @@ def add_alert(plan, alert, kind="alert"):
     for r in plan["routes"]:
         if r["load_l"] + volume > TRUCK_CAPACITY_L:
             continue
+        if alert.get("camion") is not None and r["truck"] != alert["camion"]:
+            continue                     # pubela dintr-o zona: doar camionul zonei ei
         s = r["stops"]
         for k in range(len(s) - 1):
             a, b = st[s[k]], st[s[k + 1]]

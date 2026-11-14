@@ -1,9 +1,9 @@
 import osmnx as ox
 
-# Centrul si raza acopera toate ghenele din tabela trashes a lui Robert
-# (cea mai departata, TM-003 pe Ovidiu Cotrus, e la ~5 km de centru).
-CENTER = (45.750, 21.232)   # Complex Studențesc, Timișoara
-G = ox.graph_from_point(CENTER, dist=6500, network_type="drive")
+# Dreptunghiul acopera toate ghenele din tabela trashes a lui Robert (TM-001 ... TM-017),
+# cu ~1 km margine, ca drumurile dintre ele sa fie complete.
+BBOX = (21.185, 45.700, 21.280, 45.790)   # vest, sud, est, nord
+G = ox.graph_from_bbox(BBOX, network_type="drive")
 G = ox.truncate.largest_component(G, strongly=True)
 
 print(f"Noduri: {len(G.nodes)}, Muchii: {len(G.edges)}")
