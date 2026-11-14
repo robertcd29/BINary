@@ -11,9 +11,9 @@
   --line-2: #eeece7;
   --paper: #f4f3ef;
   --surface: #ffffff;
-  --accent: #ef5a17;
-  --accent-hover: #d84c0e;
-  --accent-soft: #fdeee6;
+  --accent: #0b6e79;
+  --accent-hover: #08565f;
+  --accent-soft: #e1f0f1;
   --ok: #2e8a57;
   --ok-soft: #e6f3ec;
   --warn: #d99a06;
@@ -21,6 +21,7 @@
   --full: #d2382d;
   --full-soft: #fbe8e6;
   --route: #2b59d9;
+  --dump: #c2255c;
   --appbar-h: 56px;
   --tabbar-h: 68px;
   --font-cond: 'Barlow Semi Condensed', 'Barlow', system-ui, sans-serif;
@@ -159,7 +160,7 @@ h1, h2 { margin: 0; }
   background: var(--accent);
   border: 4px solid var(--surface);
   border-radius: 50%;
-  box-shadow: 0 4px 14px #ef5a1755;
+  box-shadow: 0 4px 14px #0b6e7955;
 }
 
 .tabbar-main[aria-current="true"] .tabbar-main-icon { background: var(--accent-hover); }
@@ -246,8 +247,6 @@ h1, h2 { margin: 0; }
   border-radius: 16px;
 }
 
-.tiles { filter: grayscale(1) contrast(.82) brightness(1.08); }
-.tiles-soft { filter: saturate(.55) contrast(.95) brightness(1.03); }
 .leaflet-container { font-family: inherit; background: #eceae4; }
 
 /* ---------- harta cetateanului ---------- */

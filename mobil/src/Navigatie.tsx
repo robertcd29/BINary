@@ -1,8 +1,8 @@
 // Navigatie pas cu pas pentru sofer, ca un GPS: instructiunea urmatoare, distanta pana la viraj,
 // voce in romana, harta care urmareste camionul si recalcularea traseului cand iese de pe el.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { CircleMarker, Polyline, useMap } from 'react-leaflet'
+import { CircleMarker, Polygon, Polyline, useMap } from 'react-leaflet'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, Compass, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
   Navigation2, Play, Square, Undo2, Volume2, VolumeX
@@ -85,6 +85,33 @@ function pointAt(line: [number, number][], cum: number[], d: number): Coordinate
     lng: line[i][1] + t * (line[i + 1][1] - line[i][1])
   }
 }
+
+/** Bucata de traseu dintre distantele d0 si d1, cu toate curbele ei. */
+function slice(line: [number, number][], cum: number[], d0: number, d1: number): [number, number][] {
+  const a = pointAt(line, cum, d0), b = pointAt(line, cum, d1)
+  return [[a.lat, a.lng], ...line.filter((_, i) => cum[i] > d0 && cum[i] < d1), [b.lat, b.lng]]
+}
+
+const ARROW_BEFORE_M = 30       // sageata de viraj incepe cu atatia metri inainte de intersectie
+const ARROW_AFTER_M = 24        // ...si se termina cu varful pe strada pe care intri
+const ARROW_HEAD_M = 13
+
+/** Sageata desenata pe strada, la intersectie: coada pe drumul de acum, varful pe strada noua (ca la Google Maps). */
+function turnArrow(line: [number, number][], cum: number[], at: number) {
+  const total = cum[cum.length - 1]
+  const d1 = Math.min(total, at + ARROW_AFTER_M)
+  const shaft = slice(line, cum, Math.max(0, at - ARROW_BEFORE_M), d1)
+  const end = pointAt(line, cum, d1)
+  const back = pointAt(line, cum, Math.max(0, d1 - 5))
+  const dir = bearing(back, end)
+  const tip = ahead(end, dir, ARROW_HEAD_M)
+  const left = ahead(end, dir - 90, ARROW_HEAD_M * 0.75)
+  const right = ahead(end, dir + 90, ARROW_HEAD_M * 0.75)
+  const head: [number, number][] = [[left.lat, left.lng], [tip.lat, tip.lng], [right.lat, right.lng]]
+  return { shaft, head }
+}
+
+const TURNS = new Set<NavStep['tip']>(['inainte', 'stanga', 'dreapta', 'usor-stanga', 'usor-dreapta', 'intoarcere'])
 
 // ---------- texte ----------
 
@@ -485,6 +512,17 @@ export function NavLayer({ n }: { n: NavState }) {
     }
   }, [map])
 
+  // sagetile de viraj: pe urmatoarele intersectii din etapa curenta
+  const leg = n.leg
+  const arrows = useMemo(() => {
+    if (!leg || leg.geometrie.length < 2) return []
+    const cum = [0]
+    for (let i = 1; i < leg.geometrie.length; i++) cum.push(cum[i - 1] + meters(leg.geometrie[i - 1], leg.geometrie[i]))
+    return leg.pasi.filter((p, i) => i > n.stepIndex && TURNS.has(p.tip))
+      .slice(0, 3)
+      .map(p => turnArrow(leg.geometrie, cum, p.la_m))
+  }, [leg, n.stepIndex])
+
   // strat propriu deasupra traseului verde (care se poate incarca dupa); il punem langa celelalte
   // straturi, in panoul care se roteste, altfel n-ar urma rotirea hartii
   if (!map.getPane(NAV_PANE)) {
@@ -497,6 +535,16 @@ export function NavLayer({ n }: { n: NavState }) {
     <>
       <Polyline pane={NAV_PANE} positions={n.leg.geometrie} pathOptions={{ color: '#fff', weight: 12, opacity: 0.9 }} />
       <Polyline pane={NAV_PANE} positions={n.leg.geometrie} pathOptions={{ color: '#2463eb', weight: 7 }} />
+      {arrows.map((a, i) => (
+        <Fragment key={i}>
+          <Polyline pane={NAV_PANE} positions={a.shaft} interactive={false}
+            pathOptions={{ color: '#0b2f7a', weight: 15, lineCap: 'butt', lineJoin: 'round' }} />
+          <Polygon pane={NAV_PANE} positions={a.head} interactive={false}
+            pathOptions={{ color: '#0b2f7a', weight: 3, fillColor: '#fff', fillOpacity: 1, lineJoin: 'round' }} />
+          <Polyline pane={NAV_PANE} positions={a.shaft} interactive={false}
+            pathOptions={{ color: '#fff', weight: 9, lineCap: 'butt', lineJoin: 'round' }} />
+        </Fragment>
+      ))}
       {n.next && n.next.tip !== 'sosire' && (
         <CircleMarker pane={NAV_PANE} center={[n.next.lat, n.next.lng]} radius={6}
           pathOptions={{ color: '#fff', weight: 2, fillColor: '#2463eb', fillOpacity: 1 }} />

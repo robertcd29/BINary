@@ -1,7 +1,8 @@
 // Aplicatia soferului: navigatie pas cu pas pe ruta zilei si lista opririlor.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Truck } from 'lucide-react'
-import { CircleMarker, MapContainer, Polyline, Popup, TileLayer, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, Polyline, Popup, useMap } from 'react-leaflet'
+import BaseMap from '../BaseMap'
 
 import {
   getDriverRoute, markAlertCollected, markStopEmptied, sendDriverPosition,
@@ -78,7 +79,7 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
             // leaflet-rotate: harta se poate roti pe directia de mers; rotirea o face doar navigatia
             {...({ rotate: true, touchRotate: false, shiftKeyRotate: false, rotateControl: false } as object)}
           >
-            <TileLayer attribution="© OpenStreetMap" url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" className="tiles-soft" />
+            <BaseMap padding={0.35} />
             {d.route && <FitRoute route={d.route.traseu} />}
             {d.route && d.route.traseu.length > 1 && (
               <Polyline positions={d.route.traseu} pathOptions={{ color, weight: 5, opacity: 0.55 }} />
@@ -87,7 +88,7 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
               <CircleMarker key={s.id} center={[s.lat, s.lng]} radius={9}
                 pathOptions={{
                   color: '#fff', weight: 3,
-                  fillColor: s.facuta ? '#9aa19e' : s.tip === 'depozitare' ? '#ef5a17' : color,
+                  fillColor: s.facuta ? '#9aa19e' : s.tip === 'depozitare' ? '#c2255c' : color,
                   fillOpacity: 1
                 }}>
                 <Popup><strong>{i + 1}. {s.nume}</strong><br />{s.adresa ?? ''}</Popup>

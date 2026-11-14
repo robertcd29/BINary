@@ -11,8 +11,11 @@
         href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+    <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
     <style>
-        /* ---------- sistemul vizual BINary: asfalt, hartie, vesta reflectorizanta ---------- */
+        /* ---------- sistemul vizual BINary: asfalt, hartie, verde-petrol ---------- */
         :root {
             color-scheme: light;
             --ink: #15191a;
@@ -23,9 +26,9 @@
             --line-2: #eeece7;
             --paper: #f4f3ef;
             --surface: #ffffff;
-            --accent: #ef5a17;
-            --accent-hover: #d84c0e;
-            --accent-soft: #fdeee6;
+            --accent: #0b6e79;
+            --accent-hover: #08565f;
+            --accent-soft: #e1f0f1;
             --ok: #2e8a57;
             --ok-soft: #e6f3ec;
             --warn: #d99a06;
@@ -33,6 +36,7 @@
             --full: #d2382d;
             --full-soft: #fbe8e6;
             --route: #2b59d9;
+            --dump: #c2255c;
             --radius: 10px;
             --font: "Barlow", system-ui, -apple-system, sans-serif;
             --font-cond: "Barlow Semi Condensed", "Barlow", system-ui, sans-serif;
@@ -227,7 +231,6 @@
         }
 
         #harta { position: absolute; inset: 0; background: #eceae4; }
-        .dale { filter: grayscale(1) contrast(.82) brightness(1.08); }
 
         .map-status {
             position: absolute;
@@ -309,10 +312,10 @@
         .depozitare {
             width: 16px;
             height: 16px;
-            background: var(--accent);
+            background: var(--dump);
             border: 3px solid #fff;
             border-radius: 50%;
-            box-shadow: 0 0 0 1px var(--accent), 0 2px 6px #0004;
+            box-shadow: 0 0 0 1px var(--dump), 0 2px 6px #0004;
         }
 
         .depozitare.colectata { background: var(--faint); box-shadow: 0 0 0 1px var(--faint); }
@@ -730,9 +733,12 @@
         // ---------- harta ----------
         const harta = L.map("harta", { zoomControl: false }).setView([45.7537, 21.2257], 13);
         L.control.zoom({ position: "topright" }).addTo(harta);
-        // dale OpenStreetMap (fara cheie API), desaturate prin CSS ca datele sa iasa in fata
-        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap", maxZoom: 19, className: "dale",
+        // harta de fundal vectoriala (OpenFreeMap, fara cheie API): clara la orice zoom
+        const ATRIBUIRE = '© <a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+        L.maplibreGL({
+            style: "https://tiles.openfreemap.org/styles/positron",
+            attribution: ATRIBUIRE,
+            attributionControl: { customAttribution: ATRIBUIRE },
         }).addTo(harta);
 
         // pubelele se micsoreaza cand dai zoom out
@@ -754,7 +760,7 @@
             d.innerHTML = `<span><i style="background:var(--ok)"></i>sub 60%</span>
                 <span><i style="background:var(--warn)"></i>60–85%</span>
                 <span><i style="background:var(--full)"></i>peste 85%</span>
-                <span><i style="background:var(--accent);border-radius:50%"></i>depozitare ilegală</span>`;
+                <span><i style="background:var(--dump);border-radius:50%"></i>depozitare ilegală</span>`;
             return d;
         };
         legenda.addTo(harta);

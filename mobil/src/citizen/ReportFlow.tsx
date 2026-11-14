@@ -2,7 +2,8 @@
 // si, daca e o depozitare reala, o pune direct pe ruta unui camion.
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Check, CircleAlert, MapPin, RotateCcw, ShieldCheck, X } from 'lucide-react'
-import { CircleMarker, MapContainer, TileLayer, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, useMap } from 'react-leaflet'
+import BaseMap from '../BaseMap'
 
 import { submitReport, type Coordinates, type ReportResult } from '../api'
 import { saveReport, type GeoState } from '../lib'
@@ -121,10 +122,10 @@ export default function ReportFlow({ geo, onDone }: { geo: GeoState; onDone: () 
           <MapContainer center={[geo.position.lat, geo.position.lng]} zoom={17} zoomControl={false}
             dragging={false} scrollWheelZoom={false} doubleClickZoom={false} touchZoom={false}
             attributionControl={false} className="mini-map">
-            <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" className="tiles" />
+            <BaseMap />
             <Recenter point={geo.position} />
             <CircleMarker center={[geo.position.lat, geo.position.lng]} radius={8}
-              pathOptions={{ color: '#fff', weight: 3, fillColor: '#ef5a17', fillOpacity: 1 }} />
+              pathOptions={{ color: '#fff', weight: 3, fillColor: '#0b6e79', fillOpacity: 1 }} />
           </MapContainer>
         )}
       </div>

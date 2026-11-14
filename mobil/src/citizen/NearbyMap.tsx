@@ -1,7 +1,8 @@
 // Harta cetateanului: ghenele cu gradul de umplere live si cea mai apropiata ghena care mai are loc.
 import { useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
-import { CircleMarker, MapContainer, Marker, TileLayer, useMap } from 'react-leaflet'
+import { CircleMarker, MapContainer, Marker, useMap } from 'react-leaflet'
+import BaseMap from '../BaseMap'
 import { LocateFixed, Navigation } from 'lucide-react'
 
 import { getBins, type Bin, type Coordinates } from '../api'
@@ -59,7 +60,7 @@ export default function NearbyMap({ geo }: { geo: GeoState }) {
   return (
     <div className="screen screen-map">
       <MapContainer center={[TIMISOARA.lat, TIMISOARA.lng]} zoom={13} zoomControl={false} className="full-map">
-        <TileLayer attribution="© OpenStreetMap" url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" className="tiles" />
+        <BaseMap />
         <FlyTo point={focus} />
         {bins.map(b => (
           <Marker
