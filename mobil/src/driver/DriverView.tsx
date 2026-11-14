@@ -1,7 +1,8 @@
 // Aplicatia soferului: navigatie pas cu pas pe ruta zilei si lista opririlor.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Truck } from 'lucide-react'
-import { CircleMarker, MapContainer, Polyline, Popup, useMap } from 'react-leaflet'
+import L from 'leaflet'
+import { MapContainer, Marker, Polyline, Popup, useMap } from 'react-leaflet'
 import BaseMap from '../BaseMap'
 
 import {
@@ -15,13 +16,35 @@ export const TRUCK_COLORS = ['#2b59d9', '#7a4bc2', '#0e8c82', '#b5487a', '#5b6b1
 const SEND_EVERY_MS = 2000     // pozitia ajunge la dispecer la fiecare 2 secunde
 const ROUTE_CHECK_MS = 10_000  // cat de des verificam daca dispecerul a pus opriri noi pe ruta
 
-function FitRoute({ route }: { route: [number, number][] }) {
+/** Incadreaza ruta in harta, lasand loc pentru statisticile de sus si cardul de jos.
+ *  Doar cand se schimba opririle (nu la fiecare reincarcare), ca sa nu mute harta mutata de sofer. */
+function FitRoute({ route, stopsKey, off }: { route: [number, number][]; stopsKey: string; off: boolean }) {
   const map = useMap()
+  const latest = useRef(route)
+  latest.current = route
   useEffect(() => {
-    if (route.length > 1) map.fitBounds(route, { padding: [28, 28] })
-  }, [route, map])
+    if (off || latest.current.length < 2) return
+    const id = setTimeout(() => {
+      map.invalidateSize({ pan: false })
+      map.fitBounds(latest.current, { paddingTopLeft: [28, 96], paddingBottomRight: [28, 250], maxZoom: 16 })
+    }, 80)
+    return () => clearTimeout(id)
+  }, [stopsKey, off, map])
   return null
 }
+
+/** Pin numerotat pentru o oprire: urmatoarea e mai mare si inchisa la culoare, cele facute sunt gri cu bifa. */
+function stopIcon(label: string, kind: 'next' | 'todo' | 'done' | 'dump', color: string) {
+  const size = kind === 'next' ? 34 : 26
+  return L.divIcon({
+    className: '',
+    html: `<div class="stop-pin ${kind}" style="--c:${color}">${label}</div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+  })
+}
+
+const CHECK_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
 
 export function useDriver(truckId: string) {
   const geo = useGeolocation(true)
@@ -77,47 +100,56 @@ export type DriverState = ReturnType<typeof useDriver>
 export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
   const n: NavState = d.navigation
   const color = TRUCK_COLORS[Number(truckId) % TRUCK_COLORS.length]
+  const r = d.route
+  const ramase = r ? r.opriri.filter(o => !o.facuta) : []
+  const nextId = n.stop?.id ?? ramase[0]?.id
+  const stopsKey = ramase.map(o => o.id).join(',')
 
   return (
-    // in timpul navigatiei harta ocupa tot ecranul; sus ramane bara cu instructiunea, jos urmatoarea oprire
-    <div className={`screen screen-pad driver${n.started ? ' fullscreen' : ''}`}>
-      {!n.started && (
-        <div className="route-strip">
-          <div><strong>{d.route ? d.route.opriri.filter(o => !o.facuta).length : '–'}</strong><span>opriri rămase</span></div>
-          <div><strong>{d.route ? formatDistance(d.route.distanta_m) : '–'}</strong><span>traseu total</span></div>
-          <div><strong>{d.route ? `${Math.round(d.route.incarcare_l).toLocaleString('ro-RO')} L` : '–'}</strong><span>de colectat</span></div>
-        </div>
-      )}
-
+    // inainte de navigatie: harta intre bara de sus si cea de jos, cu statisticile si cardul peste ea;
+    // in timpul navigatiei harta ocupa tot ecranul, sus bara cu instructiunea, jos urmatoarea oprire
+    <div className={`driver${n.started ? ' fullscreen' : ''}`}>
       <section className={`map-panel${n.started ? ' navigating' : ''}${n.tilted ? ' tilted' : ''}`}>
         <div className="map-viewport">
           <MapContainer
             center={[TIMISOARA.lat, TIMISOARA.lng]}
             zoom={13}
+            zoomSnap={0.25}   // incadrarea rutei poate folosi si zoom intre niveluri, ca ruta sa umple harta
             scrollWheelZoom={false}
             zoomControl={false}
+            attributionControl={false}
             // leaflet-rotate: harta se poate roti pe directia de mers; rotirea o face doar navigatia
             {...({ rotate: true, touchRotate: false, shiftKeyRotate: false, rotateControl: false } as object)}
           >
             <BaseMap padding={0.35} />
-            {d.route && <FitRoute route={d.route.traseu} />}
-            {d.route && d.route.traseu.length > 1 && (
-              <Polyline positions={d.route.traseu} pathOptions={{ color, weight: 5, opacity: 0.55 }} />
+            {r && <FitRoute route={r.traseu} stopsKey={stopsKey} off={n.started} />}
+            {r && r.traseu.length > 1 && (
+              <>
+                <Polyline positions={r.traseu} pathOptions={{ color: '#fff', weight: 9, opacity: 0.9 }} />
+                <Polyline positions={r.traseu} pathOptions={{ color, weight: 5, opacity: 0.9 }} />
+              </>
             )}
-            {d.route?.opriri.map((s, i) => (
-              <CircleMarker key={s.id} center={[s.lat, s.lng]} radius={9}
-                pathOptions={{
-                  color: '#fff', weight: 3,
-                  fillColor: s.facuta ? '#9aa19e' : s.tip === 'depozitare' ? '#c2255c' : color,
-                  fillOpacity: 1
-                }}>
-                <Popup><strong>{i + 1}. {s.nume}</strong><br />{s.adresa ?? ''}</Popup>
-              </CircleMarker>
-            ))}
+            {r?.opriri.map((s, i) => {
+              const kind = s.facuta ? 'done' : s.id === nextId ? 'next' : s.tip === 'depozitare' ? 'dump' : 'todo'
+              return (
+                <Marker key={s.id} position={[s.lat, s.lng]} zIndexOffset={kind === 'next' ? 1000 : kind === 'done' ? -100 : 0}
+                  icon={stopIcon(s.facuta ? CHECK_SVG : String(i + 1), kind, color)}>
+                  <Popup><strong>{i + 1}. {s.nume}</strong><br />{s.tip === 'depozitare' ? 'Depozitare ilegală' : s.adresa ?? ''}</Popup>
+                </Marker>
+              )
+            })}
             <NavLayer n={n} />
           </MapContainer>
         </div>
-        {/* cardul cu oprirea si butoanele sta peste harta, jos */}
+
+        {!n.started && r && (
+          <div className="route-chips">
+            <div><strong>{ramase.length}<small> / {r.opriri.length}</small></strong><span>opriri rămase</span></div>
+            <div><strong>{formatDistance(r.distanta_m)}</strong><span>traseu total</span></div>
+            <div><strong>{Math.round(r.incarcare_l).toLocaleString('ro-RO')} L</strong><span>de colectat</span></div>
+          </div>
+        )}
+
         <NavCard n={n} onComplete={(s: NavStop) => d.complete(s)} />
       </section>
     </div>

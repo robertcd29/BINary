@@ -557,7 +557,7 @@ h1, h2 { margin: 0; }
   border-bottom: 1px solid var(--line-2);
 }
 
-.nav-destination > div:first-child { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.nav-destination > div:not(.nav-eta) { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .nav-destination small { color: var(--muted); font-size: 12.5px; }
 .nav-destination strong { font-size: 16px; }
 .nav-eta { display: flex; flex: none; flex-direction: column; align-items: flex-end; }
@@ -690,34 +690,108 @@ body.nav-active { overflow: hidden; }
 .driver.fullscreen .map-panel.navigating .map-viewport { height: 100%; min-height: 0; }
 
 /* cardul cu oprirea si butoanele, peste harta, jos, pe fundal transparent (inainte si in timpul navigatiei) */
-.map-panel { position: relative; }
-.driver .map-viewport { height: max(460px, calc(100dvh - 300px)); }
+/* inainte de navigatie: harta umple tot spatiul dintre bara de sus si cea de jos */
+.driver .map-panel {
+  position: fixed;
+  z-index: 10;
+  top: calc(var(--appbar-h) + env(safe-area-inset-top));
+  right: max(0px, calc(50% - 280px));
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  left: max(0px, calc(50% - 280px));
+  border: 0;
+  border-radius: 0;
+}
+
+.driver .map-viewport { height: 100%; }
+
+/* statisticile rutei, plutind sus peste harta */
+.route-chips {
+  position: absolute;
+  z-index: 1600;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: #ffffffe0;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px #00000024;
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+}
+
+.route-chips div { display: flex; flex-direction: column; padding: 9px 12px; min-width: 0; }
+.route-chips div + div { border-left: 1px solid #15191a14; }
+.route-chips strong { font: 800 19px/1.15 var(--font-cond); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.route-chips strong small { color: var(--faint); font-size: 14px; font-weight: 700; }
+.route-chips span { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+/* opririle pe harta: pini numerotati */
+.stop-pin {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  color: #fff;
+  background: var(--c);
+  border: 2.5px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px #0000004d;
+  font: 800 13px/1 var(--font-cond);
+}
+
+.stop-pin.dump { background: var(--dump); }
+.stop-pin.done { color: #fff; background: var(--faint); box-shadow: none; opacity: .85; }
+.stop-pin.next { background: var(--ink); border-width: 3px; font-size: 16px; box-shadow: 0 0 0 5px #15191a26, 0 3px 8px #00000059; }
 
 .map-panel .nav-card {
   position: absolute;
   z-index: 1600;
-  right: 0;
-  bottom: 0;
-  left: 0;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
   margin: 0;
-  background: #ffffffb8;
+  background: #ffffffe6;
   border: 0;
-  border-radius: 16px 16px 0 0;
+  border-radius: 20px;
   box-shadow: 0 -6px 20px #0000002e;
   -webkit-backdrop-filter: blur(10px) saturate(1.4);
   backdrop-filter: blur(10px) saturate(1.4);
 }
 
-.map-panel .nav-instruction { border-radius: 16px 16px 0 0; }
 .map-panel .nav-destination { padding: 12px 16px 4px; border-bottom: 0; }
+
+/* cardul de dinainte de pornire */
+.sheet-handle { display: block; width: 36px; height: 4px; margin: 8px auto 0; background: #15191a26; border-radius: 2px; }
+.nav-card.preview .nav-destination { gap: 12px; padding: 10px 16px 6px; }
+.nav-card.preview .nav-destination > div:not(.nav-eta) { flex: 1; }
+.nav-card.preview .nav-destination strong { font-size: 18px; line-height: 1.2; }
+.nav-card.preview .nav-actions { padding: 10px 16px 4px; }
+.nav-card.preview .primary-button { min-height: 54px; font-size: 16px; box-shadow: 0 4px 14px #0b6e7959; }
+.nav-card.preview .nav-footer { padding: 2px 16px 10px; }
+
+.dest-badge {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 12px;
+}
+
+.dest-badge.depozitare { color: var(--dump); background: #fbe6ee; }
+.dest-badge.depou { color: var(--ink); background: var(--line-2); }
 .map-panel .nav-destination small { color: var(--ink-2); }
 .map-panel .nav-actions { padding: 10px 16px 4px; }
-.map-panel .secondary-button,
-.map-panel .icon-button { background: #ffffffcc; }
+.driver.fullscreen .secondary-button,
+.driver.fullscreen .icon-button { background: #ffffffcc; }
 .map-panel .nav-footer { padding: 0 16px 8px; }
 
 .driver.fullscreen .nav-card {
   position: fixed;
+  bottom: 0;
   left: 50%;
   right: auto;
   width: min(560px, 100%);

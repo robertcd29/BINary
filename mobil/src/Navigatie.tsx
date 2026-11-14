@@ -5,7 +5,7 @@ import L from 'leaflet'
 import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, Compass, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
-  Navigation2, Play, Square, Undo2, Volume2, VolumeX
+  Navigation2, Play, Square, Trash2, TriangleAlert, Undo2, Volume2, VolumeX
 } from 'lucide-react'
 
 type RotatableMap = L.Map & { setBearing?: (deg: number) => void }
@@ -287,9 +287,6 @@ export function NavCard({ n, onComplete }: {
   }
 
   const ramase = n.nav.opriri.filter(o => o.tip !== 'depou').length
-  const instructiune = n.arrived || !n.next
-    ? null
-    : n.started ? inDistance(n.next, n.toNext) : n.current?.text
 
   async function done() {
     if (!n.stop) return
@@ -303,27 +300,16 @@ export function NavCard({ n, onComplete }: {
   }
 
   return (
-    <section className="panel nav-card">
-      {!n.started && <div className={`nav-instruction${n.arrived ? ' arrived' : ''}`}>
-        <div className="nav-arrow">
-          <ManeuverIcon tip={n.arrived ? 'sosire' : n.started ? (n.next?.tip ?? 'sosire') : (n.current?.tip ?? 'start')} />
-        </div>
-        <div>
-          {n.arrived ? (
-            <strong>{n.stop.tip === 'depou' ? 'Ai ajuns la depou' : `Ai ajuns la ${n.stop.nume}`}</strong>
-          ) : (
-            <>
-              {n.started && n.next && <span className="nav-distance">{formatDistance(n.toNext)}</span>}
-              <strong>{instructiune}</strong>
-            </>
-          )}
-          {!n.arrived && n.started && n.current && <small>Acum pe {n.current.strada}</small>}
-        </div>
-      </div>}
-
+    <section className={`panel nav-card${n.started ? '' : ' preview'}`}>
+      {!n.started && <span className="sheet-handle" aria-hidden="true" />}
       <div className="nav-destination">
+        {!n.started && (
+          <span className={`dest-badge ${n.stop.tip}`} aria-hidden="true">
+            {n.stop.tip === 'depou' ? <Flag size={20} /> : n.stop.tip === 'depozitare' ? <TriangleAlert size={20} /> : <Trash2 size={20} />}
+          </span>
+        )}
         <div>
-          <small>{n.stop.tip === 'depou' ? 'Ultima etapă' : `Următoarea oprire · ${ramase} rămase`}</small>
+          <small>{n.stop.tip === 'depou' ? 'Ultima etapă' : `${n.started ? 'Următoarea oprire' : 'Prima oprire'} · ${ramase} rămase`}</small>
           <strong>{n.stop.tip === 'depou' ? 'Întoarcere la depou' : n.stop.nume}</strong>
           {n.stop.adresa && <small>{n.stop.adresa}</small>}
         </div>
