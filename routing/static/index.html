@@ -302,8 +302,8 @@
         .pubela i { position: absolute; right: 0; bottom: 0; left: 0; }
 
         /* ghenele de reciclabile: corp albastru, ca sa se vada dintr-o privire */
-        .pubela.reciclabil { background: #e3eefc; border-color: var(--recicl); }
-        .pubela.reciclabil::before { background: var(--recicl); }
+        .pubela.reciclabil { background: var(--recicl); border-color: #0b3d80; border-radius: 7px 7px 4px 4px; }
+        .pubela.reciclabil::before { background: #0b3d80; }
 
         .pubela.pe-ruta { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--c, var(--route)); }
         .pubela.offline { opacity: .45; border-style: dashed; }
@@ -832,7 +832,8 @@
                 <span><i style="background:var(--warn)"></i>60–85%</span>
                 <span><i style="background:var(--full)"></i>peste 85%</span>
                 <span><i style="background:var(--dump);border-radius:50%"></i>depozitare ilegală</span>
-                <span><i style="background:#e3eefc;border:2px solid var(--recicl)"></i>ghenă reciclabile</span>`;
+                <span><i style="background:var(--recicl);border:2px solid #0b3d80"></i>ghenă reciclabile</span>
+                <span><i style="width:18px;height:0;border-top:3px dotted var(--ink);border-radius:0"></i>rută reciclabile</span>`;
             return d;
         };
         legenda.addTo(harta);
@@ -899,8 +900,10 @@
                 const c = CULORI[r.truck % CULORI.length];
                 const slaba = rutaEvidentiata != null && rutaEvidentiata !== r.truck;
                 const casing = L.polyline(r.geometry, { color: "#fff", weight: 9, opacity: slaba ? .3 : .95 }).addTo(stratRute);
-                const linie = L.polyline(r.geometry, { color: c, weight: rutaEvidentiata === r.truck ? 6 : 4.5, opacity: slaba ? .25 : 1 })
-                    .bindTooltip(`${numeCamion(r.truck)} · ${fmt(r.distance_m / 1000, 1)} km`, { sticky: true, className: "tip" })
+                const recicl = TIPURI[r.truck] === "reciclabil";   // rutele de reciclabile: linie punctata
+                const linie = L.polyline(r.geometry, { color: c, weight: rutaEvidentiata === r.truck ? 6 : 4.5, opacity: slaba ? .25 : 1,
+                                                       dashArray: recicl ? "2 9" : null, lineCap: "round" })
+                    .bindTooltip(`${numeCamion(r.truck)} · ${recicl ? "Reciclabile" : "Menajer"} · ${fmt(r.distance_m / 1000, 1)} km`, { sticky: true, className: "tip" })
                     .addTo(stratRute);
                 liniiRute[r.truck] = [casing, linie];
             });
