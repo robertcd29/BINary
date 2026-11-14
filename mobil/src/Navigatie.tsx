@@ -193,15 +193,19 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   const next = leg?.pasi[stepIndex + 1] ?? null
   const toNext = next ? Math.max(0, next.la_m - progress.along) : 0
   const remaining = leg ? Math.max(0, leg.distanta_m - progress.along) : 0
-  const arrived = !!leg && !!position && remaining <= ARRIVED_M
+  // ajuns = chiar langa oprire, nu doar "la capatul traseului" (un GPS departe de traseu s-ar
+  // proiecta oriunde pe el, inclusiv la capat)
+  const arrived = !!leg && !!position && !!stop &&
+    remaining <= ARRIVED_M && meters([position.lat, position.lng], [stop.lat, stop.lng]) <= ARRIVED_M * 2
   const etaMin = Math.max(1, Math.round(remaining / TRUCK_SPEED_MS / 60))
 
-  // a iesit de pe traseu: recalculam de unde e acum
+  // e departe de traseu (a luat-o pe alt drum, sau GPS-ul a aparut abia dupa calcul):
+  // recalculam de unde e acum
   useEffect(() => {
-    if (!started || !position || !leg || progress.off < OFF_ROUTE_M) return
+    if (!position || !leg || progress.off < OFF_ROUTE_M) return
     if (Date.now() - lastReroute.current < REROUTE_EVERY_MS) return
     lastReroute.current = Date.now()
-    if (voice) speak('Recalculez traseul')
+    if (started && voice) speak('Recalculez traseul')
     refresh(position)
   }, [started, position, leg, progress.off, voice, refresh])
 
@@ -358,14 +362,14 @@ export function NavCard({ n, onComplete }: {
 
       <div className="nav-footer">
         <button className="link-button" onClick={n.toggleSim}>
-          {n.simulating ? <><Square size={13} /> Oprește simularea</> : <><Play size={13} /> Simulează drumul (demo)</>}
+          {n.simulating ? <><Square size={13} /> Oprește simularea</> : <><Play size={13} /> Simulare demo</>}
         </button>
         <a
           className="link-button"
           href={`https://www.google.com/maps/dir/?api=1&destination=${n.stop.lat},${n.stop.lng}&travelmode=driving`}
           target="_blank" rel="noreferrer"
         >
-          Deschide în Google Maps
+          Google Maps ↗
         </a>
       </div>
     </section>
