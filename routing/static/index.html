@@ -949,9 +949,11 @@
         // ---------- desen: depozitari si camioane ----------
         function deseneazaDepozitari() {
             stratDepozitari.clearLayers();
-            stare.alerte.filter(a => a.status !== "duplicat").forEach(a => {
+            // pe harta raman doar depozitarile care inca sunt acolo: cele colectate de camion sau
+            // pe care camera nu le mai vede dispar imediat (in tabul Raportari mai stau cateva minute)
+            stare.alerte.filter(a => a.status !== "duplicat" && !inchisa(a)).forEach(a => {
                 const m = L.marker([a.lat, a.lng], {
-                    icon: L.divIcon({ className: "", html: `<div class="depozitare${inchisa(a) ? " colectata" : ""}"></div>`, iconSize: [16, 16] }),
+                    icon: L.divIcon({ className: "", html: `<div class="depozitare"></div>`, iconSize: [16, 16] }),
                     zIndexOffset: 1500,
                 }).addTo(stratDepozitari);
                 const p = el("div");
@@ -1163,6 +1165,8 @@
             const nume = p?.nume || e.id;
             switch (e.status) {
                 case "golita": return [`${nume} a fost golită`, false];
+                case "colectata": return [`Depozitarea ${e.id} a fost colectată de camion`, false];
+                case "disparuta": return [`Depozitarea ${e.id} nu mai e acolo (camera nu o mai vede); scoasă din rută`, true];
                 case "citire": return [`${nume}: umplere ${e.inainte}% → ${e.umplere}%`, e.umplere >= 85];
                 case "assigned": return [`${nume} a fost adăugată pe ruta camionului ${e.truck + 1}` + (e.extra_m ? ` (+${fmt(e.extra_m / 1000, 1)} km)` : ""), true];
                 case "pending": return [`${nume} are deșeuri, dar niciun camion nu mai are loc azi`, true];

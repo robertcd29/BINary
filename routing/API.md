@@ -68,7 +68,32 @@ Răspuns: `{ "status": "ok" }`
 Șoferul apasă „golită” la o pubelă. Fără body. Răspuns: `{ "status": "ok" }`
 
 ### `POST /alerte/{id}/colectata`  — există
-Șoferul apasă „colectată” la o depozitare ilegală. Fără body. Răspuns: `{ "status": "ok" }`
+Șoferul apasă „colectată” la o depozitare ilegală. Fără body. Răspuns: `{ "status": "ok" }`.
+Dacă alerta era deja închisă (a doua apăsare, sau camera a văzut înainte că locul e curat), răspunsul e tot `ok`, cu `"deja": "colectata" | "disparuta"`.
+
+---
+
+## Camera (Daria)
+Adresa: `https://binary-tm.duckdns.org/api/...`. La un push pe `routing` serverul repornește și câteva secunde răspunde **502**: scriptul camerei reîncearcă (de ex. de 5 ori, la 2–3 s), nu raportează „backend indisponibil” de la prima încercare.
+
+### `POST /api/alerte` — camera vede gunoi
+```json
+{ "lat": 45.7368, "lng": 21.2527, "sursa": "camera", "camera_id": "CAM-01", "marime": "medie",
+  "imagine": "<JPEG în base64, opțional>" }
+```
+Se poate trimite la fiecare detecție: la sub 50 m de o alertă deschisă e `"status": "duplicat"` (aceeași alertă, nu una nouă).
+Răspuns: `{ "id": "AL-0009", "status": "assigned" | "pending" | "duplicat", ... }`.
+
+### `POST /api/alerte/curat` — camera nu mai vede gunoiul
+Cineva l-a luat sau a fost o detecție falsă. Se închid alertele deschise din raza de 50 m (status `disparuta`), opririle ies din rutele șoferilor, punctele dispar de pe hartă. Nu trebuie știut id-ul alertei.
+```
+Header: X-Cheie-Camera: <CHEIE_CAMERA din .env-ul serverului>
+Body:   { "lat": 45.7368, "lng": 21.2527, "camera_id": "CAM-01" }
+```
+Aceleași coordonate ca la `POST /api/alerte`. Trimis **abia după câteva cadre la rând fără gunoi** (ca un om sau o mașină care trece prin fața camerei să nu scoată oprirea din rută). Se poate trimite de mai multe ori.
+Răspuns: `{ "status": "ok", "inchise": ["AL-0009"] }` (listă goală = nu era nimic deschis acolo). Fără cheie sau cu cheie greșită: 401.
+
+`POST /api/alerte/{id}/disparuta` face același lucru pentru un singur id (același header).
 
 ---
 

@@ -71,7 +71,7 @@ export const getBins = () => apiRequest<Bin[]>('/api/pubele')
 
 // ---------- raportari de la cetateni ----------
 
-export type AlertStatus = 'deschisa' | 'asignata' | 'colectata' | 'duplicat'
+export type AlertStatus = 'deschisa' | 'asignata' | 'colectata' | 'disparuta' | 'duplicat'
 
 export type Alert = {
   id: string

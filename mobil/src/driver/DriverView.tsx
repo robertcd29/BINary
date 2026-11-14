@@ -72,6 +72,8 @@ export function useDriver(truckId: string) {
   // un raport nou (sau o reordonare) schimba opririle: reincarcam ruta si navigatia
   const stopsKey = route ? route.opriri.filter(o => !o.facuta).map(o => o.id).join(',') : null
   const lastKey = useRef<string | null>(null)
+  const routeRef = useRef(route)
+  routeRef.current = route
   const refreshNav = navigation.refresh
   useEffect(() => {
     const id = setInterval(loadRoute, ROUTE_CHECK_MS)
@@ -82,9 +84,13 @@ export function useDriver(truckId: string) {
     const before = lastKey.current
     lastKey.current = stopsKey
     if (before === null || before === stopsKey) return
-    const noi = stopsKey.split(',').filter(id => !before.split(',').includes(id))
-    if (noi.length && navigation.started && navigation.voice) {
-      speak('Rută actualizată: o oprire nouă')
+    const acum = stopsKey.split(',').filter(Boolean)
+    const noi = acum.filter(id => !before.split(',').includes(id))
+    // scoasa din ruta (nu bifata de sofer): camera a vazut ca depozitarea nu mai e acolo
+    const scoase = before.split(',').filter(id => id && !routeRef.current?.opriri.some(o => o.id === id))
+    if (navigation.started && navigation.voice) {
+      if (noi.length) speak('Rută actualizată: o oprire nouă')
+      else if (scoase.length) speak('Rută actualizată: o depozitare nu mai e acolo, a fost scoasă din rută')
     }
     refreshNav()
   }, [stopsKey, refreshNav, navigation.started, navigation.voice])

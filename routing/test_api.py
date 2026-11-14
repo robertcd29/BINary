@@ -112,6 +112,37 @@ def test_replanificare_si_colectare(client):
     assert trashes_snapshot()[1] == 3
 
 
+def test_camera_nu_mai_vede_gunoiul(client):
+    os.environ["CHEIE_CAMERA"] = "cheie-test"
+    client.post("/api/rute/planifica")
+    a = client.post("/api/alerte", json={"lat": 45.7550, "lng": 21.2400, "sursa": "camera", "camera_id": "C1"}).json()
+    assert a["status"] == "assigned", a
+    loc = {"lat": 45.7551, "lng": 21.2401}                       # ~14 m, in aceeasi raza
+    assert client.post("/api/alerte/curat", json=loc).status_code == 401
+    assert client.post("/api/alerte/curat", json=loc, headers={"X-Cheie-Camera": "gresita"}).status_code == 401
+    departe = client.post("/api/alerte/curat", json={"lat": 45.70, "lng": 21.20},
+                          headers={"X-Cheie-Camera": "cheie-test"}).json()
+    assert departe["inchise"] == []
+    r = client.post("/api/alerte/curat", json=loc, headers={"X-Cheie-Camera": "cheie-test"}).json()
+    assert r["inchise"] == [a["id"]]
+    plan = client.get("/api/rute").json()
+    assert a["id"] not in {s for r in plan["routes"] for s in r["stops"]}
+    assert {x["id"]: x for x in client.get("/api/alerte").json()}[a["id"]]["status"] == "disparuta"
+    # soferul care ajunge totusi acolo si apasa "am colectat" nu primeste eroare
+    assert client.post(f"/api/alerte/{a['id']}/colectata").json()["status"] == "ok"
+    # a doua oara, dupa id, nu mai schimba nimic
+    again = client.post(f"/api/alerte/{a['id']}/disparuta", headers={"X-Cheie-Camera": "cheie-test"}).json()
+    assert again["inchise"] == []
+
+
+def test_colectata_de_camion_de_doua_ori(client):
+    a = client.post("/api/alerte", json={"lat": 45.7650, "lng": 21.2200}).json()
+    assert client.post(f"/api/alerte/{a['id']}/colectata").json() == {"status": "ok"}
+    assert client.post(f"/api/alerte/{a['id']}/colectata").json()["status"] == "ok"   # reincercare dupa 502
+    plan = client.get("/api/rute").json()
+    assert any(e["id"] == a["id"] and e["status"] == "colectata" for e in plan["evenimente"])
+
+
 def test_reset_demo_sterge_alertele(client):
     ids = {a["id"] for a in client.get("/api/alerte").json()}
     assert ids, "testele de mai sus au creat alerte"

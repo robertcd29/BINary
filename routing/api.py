@@ -654,26 +654,66 @@ def alerta(r: Raportare):
     return rez
 
 
-@router.post("/alerte/{alert_id}/disparuta")
-def alerta_disparuta(alert_id: str, x_cheie_camera: str | None = Header(None)):
-    """Camera anunta ca depozitarea nu mai e acolo (luata de altcineva sau detectie falsa).
-
-    Nu e o colectare: alerta se inchide cu statusul "disparuta", iar oprirea iese din ruta
-    camionului (nu ramane bifata). Apelul cere cheia camerelor (CHEIE_CAMERA din .env).
-    """
+def _cere_cheie_camera(x_cheie_camera):
+    """Doar camerele (cu CHEIE_CAMERA din .env) au voie sa scoata alerte din rute."""
     cheie = os.environ.get("CHEIE_CAMERA", "")
     if not cheie:
         raise HTTPException(503, "Cheia camerelor (CHEIE_CAMERA) nu e setata pe server")
     if not x_cheie_camera or not hmac.compare_digest(x_cheie_camera, cheie):
         raise HTTPException(401, "Cheie de cameră greșită")
-    with _connect() as conn, _lock:
-        found = conn.execute("""UPDATE rutare_alerte SET status = 'disparuta', inchisa = now()
-                                WHERE id = %s AND status IN ('deschisa', 'asignata')""", (alert_id,)).rowcount
-        if not found:
-            raise HTTPException(404, "Alerta nu exista sau e deja inchisa")
+
+
+def _inchide_disparute(conn, ids):
+    """Depozitarile nu mai sunt acolo: alertele se inchid "disparuta" si opririle ies din rute
+    (nu raman bifate). Intoarce id-urile inchise acum (cele deja inchise sunt ignorate)."""
+    inchise = [r["id"] for r in conn.execute(
+        """UPDATE rutare_alerte SET status = 'disparuta', inchisa = now()
+           WHERE id = ANY(%s) AND status IN ('deschisa', 'asignata') RETURNING id""", (list(ids),)).fetchall()]
+    for aid in inchise:
         if _state["plan"] is not None:
-            engine.scoate_oprire(_state["plan"], alert_id)
-    return {"status": "ok"}
+            engine.scoate_oprire(_state["plan"], aid)
+        _event({"id": aid, "status": "disparuta"})
+    return inchise
+
+
+@router.post("/alerte/{alert_id}/disparuta")
+def alerta_disparuta(alert_id: str, x_cheie_camera: str | None = Header(None)):
+    """Camera anunta ca depozitarea cu acest id nu mai e acolo (luata de altcineva sau detectie falsa).
+
+    Nu e o colectare: alerta se inchide cu statusul "disparuta", iar oprirea iese din ruta camionului.
+    Cere headerul X-Cheie-Camera. Se poate chema de mai multe ori (a doua oara nu mai schimba nimic).
+    """
+    _cere_cheie_camera(x_cheie_camera)
+    with _connect() as conn, _lock:
+        if not conn.execute("SELECT 1 FROM rutare_alerte WHERE id = %s", (alert_id,)).fetchone():
+            raise HTTPException(404, "Alerta nu există")
+        inchise = _inchide_disparute(conn, [alert_id])
+    return {"status": "ok", "inchise": inchise}
+
+
+class LocCurat(BaseModel):
+    lat: float
+    lng: float
+    camera_id: str | None = None
+
+
+@router.post("/alerte/curat")
+def loc_curat(l: LocCurat, x_cheie_camera: str | None = Header(None)):
+    """Camera nu mai vede gunoi la (lat, lng): se inchid toate alertele deschise de acolo
+    (pe o raza de MERGE_RADIUS_M, aceeasi ca la duplicate), fara sa trebuiasca stiut id-ul lor.
+
+    Camera trimite aceleasi coordonate ca la POST /api/alerte. Ca un singur cadru fara gunoi
+    (cineva care trece prin fata) sa nu scoata oprirea din ruta, camera trimite asta abia dupa
+    ce nu mai vede gunoiul cateva cadre la rand. Cere headerul X-Cheie-Camera.
+    """
+    _cere_cheie_camera(x_cheie_camera)
+    with _connect() as conn, _lock:
+        deschise = conn.execute(
+            "SELECT id, lat, lng FROM rutare_alerte WHERE status IN ('deschisa', 'asignata')").fetchall()
+        aproape = [a["id"] for a in deschise
+                   if dumping.distance_m(a["lat"], a["lng"], l.lat, l.lng) <= dumping.MERGE_RADIUS_M]
+        inchise = _inchide_disparute(conn, aproape)
+    return {"status": "ok", "inchise": inchise}
 
 
 @router.get("/alerte")
@@ -685,12 +725,17 @@ def lista_alerte():
 @router.post("/alerte/{alert_id}/colectata")
 def alerta_colectata(alert_id: str, date: dict | None = Depends(cere_rol("sofer", "admin"))):
     with _connect() as conn, _lock:   # conexiunea (lenta) se deschide inainte de lacat
+        a = conn.execute("SELECT status FROM rutare_alerte WHERE id = %s", (alert_id,)).fetchone()
+        if a is None:
+            raise HTTPException(404, "Alerta nu există")
+        if a["status"] in ("colectata", "disparuta"):
+            # deja inchisa: a doua apasare, o reincercare dupa o cadere scurta sau camera a vazut
+            # inaintea soferului ca nu mai e nimic acolo. Pentru sofer e tot "gata", nu o eroare.
+            return {"status": "ok", "deja": a["status"]}
         _verifica_oprire(date, alert_id)
-        found = conn.execute("""UPDATE rutare_alerte SET status = 'colectata', inchisa = now()
-                                WHERE id = %s AND status <> 'colectata'""", (alert_id,)).rowcount
-        if not found:
-            raise HTTPException(404, "Alerta nu exista sau e deja colectata")
+        conn.execute("UPDATE rutare_alerte SET status = 'colectata', inchisa = now() WHERE id = %s", (alert_id,))
         _state["facute"].add(alert_id)
+        _event({"id": alert_id, "status": "colectata"})
         _dupa_bifare(alert_id)
     return {"status": "ok"}
 

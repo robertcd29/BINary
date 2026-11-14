@@ -5,11 +5,21 @@ import { Camera } from 'lucide-react'
 import { getAlerts, photoUrl, type Alert } from '../api'
 import { loadReports, timeAgo } from '../lib'
 
-const STEPS = ['Trimis', 'Verificat', 'Pe rută', 'Colectat']
+const STEPS = ['Trimis', 'Verificat', 'Pe rută', 'Rezolvat']
+
+// rezolvat = colectat de camion sau nu mai e acolo (camera a vazut ca locul e curat)
+const resolved = (a: Alert | undefined) => a?.status === 'colectata' || a?.status === 'disparuta'
+
+function label(a: Alert | undefined) {
+  if (a?.status === 'colectata') return 'Colectată'
+  if (a?.status === 'disparuta') return 'Rezolvată · locul e curat'
+  if (a?.status === 'asignata') return `Pe ruta camionului ${(a.camion ?? 0) + 1}`
+  return 'Verificată'
+}
 
 function stepOf(a: Alert | undefined) {
   if (!a) return 1
-  if (a.status === 'colectata') return 3
+  if (resolved(a)) return 3
   if (a.status === 'asignata') return 2
   return 1
 }
@@ -29,7 +39,7 @@ export default function MyReports({ onNew }: { onNew: () => void }) {
     return () => { alive = false; clearInterval(id) }
   }, [reports.length])
 
-  const collected = reports.filter(r => alerts[r.id]?.status === 'colectata').length
+  const collected = reports.filter(r => resolved(alerts[r.id])).length
 
   return (
     <div className="screen screen-pad">
@@ -41,7 +51,7 @@ export default function MyReports({ onNew }: { onNew: () => void }) {
       {reports.length > 0 && (
         <div className="impact">
           <div><strong>{reports.length}</strong><span>trimise</span></div>
-          <div><strong>{collected}</strong><span>colectate</span></div>
+          <div><strong>{collected}</strong><span>rezolvate</span></div>
           <div><strong>{reports.length - collected}</strong><span>în lucru</span></div>
         </div>
       )}
@@ -63,7 +73,7 @@ export default function MyReports({ onNew }: { onNew: () => void }) {
                 <img src={photoUrl(r.id)} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = 'hidden' }} />
                 <div className="report-body">
                   <div className="report-top">
-                    <strong>{a?.status === 'colectata' ? 'Colectată' : a?.status === 'asignata' ? `Pe ruta camionului ${(a.camion ?? 0) + 1}` : 'Verificată'}</strong>
+                    <strong>{label(a)}</strong>
                     <time>{timeAgo(r.createdAt)}</time>
                   </div>
                   <p>{r.descriere}</p>
