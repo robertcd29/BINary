@@ -17,7 +17,8 @@ export class ApiError extends Error {
  *  si nu trebuie sa stearga ce vede soferul pe ecran. */
 export const isTransient = (e: unknown) => e instanceof ApiError && (e.status === 0 || e.status >= 500)
 
-const RETRY_DELAYS_MS = [700, 1800]
+// ~30 s in total: cat dureaza o repornire a serverului dupa un deploy (Caddy da 502 intre timp)
+const RETRY_DELAYS_MS = [700, 1500, 3000, 5000, 8000, 12000]
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   // cererile care schimba ceva (POST) merg cu tokenul de login; citirile raman publice
@@ -30,12 +31,15 @@ export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T
     } catch {
       response = new Response(null, { status: 599 })
     }
-    // citirile se reincearca singure la o cadere scurta a serverului; POST-urile nu (sa nu se dubleze)
-    if (isRead && attempt < RETRY_DELAYS_MS.length && [502, 503, 504, 599].includes(response.status)) {
+    // citirile se reincearca singure la o cadere scurta a serverului. Scrierile doar la 502: atunci
+    // Caddy nici nu a ajuns la server, deci cererea sigur nu s-a facut si nu se poate dubla
+    const retry = isRead ? [502, 503, 504, 599].includes(response.status) : response.status === 502
+    if (retry && attempt < RETRY_DELAYS_MS.length) {
       await new Promise(r => setTimeout(r, RETRY_DELAYS_MS[attempt]))
       continue
     }
     if (response.status === 599) throw new ApiError('Nu am legătură cu serverul. Verifică internetul.', 0)
+    if (response.status === 502) throw new ApiError('Serverul se repornește. Încearcă din nou în câteva secunde.', 502)
     if (!response.ok) {
       let detail = `Serverul a răspuns cu HTTP ${response.status}`
       try {

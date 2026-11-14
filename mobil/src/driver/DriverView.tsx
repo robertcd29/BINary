@@ -52,13 +52,20 @@ export function useDriver(truckId: string) {
   const [route, setRoute] = useState<DriverRoute | null>(null)
   const [error, setError] = useState('')
 
-  const loadRoute = useCallback(() => getDriverRoute(truckId)
+  // o singura cerere odata: cu serverul in repornire, o cerere poate astepta pana la ~30 s
+  const routeBusy = useRef(false)
+  const loadRoute = useCallback(() => {
+    if (routeBusy.current) return Promise.resolve()
+    routeBusy.current = true
+    return getDriverRoute(truckId)
     .then(r => { setRoute(r); setError('') })
     .catch(e => {
       // o cadere scurta a serverului nu sterge ruta de pe ecran: reincercam la urmatoarea verificare
       if (isTransient(e)) return
       setRoute(null); setError(e instanceof Error ? e.message : 'Nu am putut încărca ruta.')
-    }), [truckId])
+    })
+    .finally(() => { routeBusy.current = false })
+  }, [truckId])
 
   useEffect(() => { loadRoute() }, [loadRoute])
 

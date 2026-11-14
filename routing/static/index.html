@@ -772,16 +772,36 @@
             return true;
         }
 
+        // dupa fiecare deploy serverul se reporneste cateva secunde si Caddy raspunde 502 intre timp:
+        // citirile se reincearca, scrierile doar la 502 (atunci cererea sigur n-a ajuns la server)
+        const PAUZE_REINCERCARE_MS = [700, 1500, 3000, 5000, 8000, 12000];
+        class EroareServer extends Error {
+            constructor(mesaj, status) { super(mesaj); this.status = status; }
+        }
+        const trecatoare = e => e instanceof EroareServer && (e.status === 0 || e.status >= 500);
+
         async function cere(metoda, url) {
-            const r = await fetch(url, { method: metoda, headers: metoda === "GET" ? {} : await antetAuth() });
-            if (!r.ok) throw new Error(`${r.status} la ${url}`);
-            return r.json();
+            for (let incercare = 0; ; incercare++) {
+                let r;
+                try {
+                    r = await fetch(url, { method: metoda, headers: metoda === "GET" ? {} : await antetAuth() });
+                } catch {
+                    r = { ok: false, status: 0 };
+                }
+                const reincearca = metoda === "GET" ? [0, 502, 503, 504].includes(r.status) : r.status === 502;
+                if (reincearca && incercare < PAUZE_REINCERCARE_MS.length) {
+                    await new Promise(ok => setTimeout(ok, PAUZE_REINCERCARE_MS[incercare]));
+                    continue;
+                }
+                if (!r.ok) throw new EroareServer(r.status === 502 || r.status === 0 ? "serverul se repornește" : `${r.status} la ${url}`, r.status);
+                return r.json();
+            }
         }
 
         const fmt = (n, d = 0) => Number(n).toLocaleString("ro-RO", { maximumFractionDigits: d, minimumFractionDigits: d });
         const culoareUmplere = p => p >= 85 ? "var(--full)" : p >= 60 ? "var(--warn)" : "var(--ok)";
         let NUMERE = [], TIPURI = [];           // numerele de inmatriculare si ce strange fiecare camion
-        fetch("/api/camioane").then(r => r.json()).then(c => { NUMERE = c.map(x => x.nr); TIPURI = c.map(x => x.tip); try { deseneazaTot(); } catch { /* datele vin la urmatoarea actualizare */ } }).catch(() => {});
+        cere("GET", "/api/camioane").then(c => { NUMERE = c.map(x => x.nr); TIPURI = c.map(x => x.tip); try { deseneazaTot(); } catch { /* datele vin la urmatoarea actualizare */ } }).catch(() => {});
         const numeCamion = t => NUMERE[t] || `Camion ${t + 1}`;
 
         function timpTrecut(iso) {
@@ -1218,7 +1238,7 @@
 
         async function actualizeaza(planNou) {
             const [pubele, alerte, pozitii] = await Promise.all([
-                cere("GET", "/api/pubele"), cere("GET", "/api/alerte").catch(() => []), cere("GET", "/api/pozitii").catch(() => []),
+                cere("GET", "/api/pubele"), cere("GET", "/api/alerte").catch(() => stare.alerte), cere("GET", "/api/pozitii").catch(() => stare.pozitii),
             ]);
             stare = { ...stare, pubele, alerte, pozitii };
             if (planNou) stare.plan = planNou;
@@ -1233,7 +1253,8 @@
                 if (!stare.plan) stareHarta("Se calculează rutele de azi…");
                 cere("GET", "/api/rute")
                     .then(pl => { stare.plan = pl; stareHarta(""); deseneazaTot(); })
-                    .catch(e => stareHarta(`Rutele nu s-au putut încărca (${e.message}). Reîncerc…`))
+                    // cu un plan deja pe harta, o cadere scurta nu acopera harta cu un mesaj
+                    .catch(e => { if (!(stare.plan && trecatoare(e))) stareHarta(`Rutele nu s-au putut încărca (${e.message}). Reîncerc…`); })
                     .finally(() => { ruteInCurs = false; });
             }
             seteazaStatus(`Live · actualizat la ${ora()}`);
@@ -1280,9 +1301,16 @@
             }
         };
 
+        let actualizareInCurs = false;
         function porneste() {
             if (document.querySelector(".leaflet-popup")) return;   // nu inchidem popup-ul pe care il citeste cineva
-            actualizeaza().catch(e => seteazaStatus(`Fără legătură cu serverul (${e.message}). Reîncerc…`, true));
+            if (actualizareInCurs) return;      // cu serverul in repornire, o actualizare poate astepta ~30 s
+            actualizareInCurs = true;
+            actualizeaza()
+                .catch(e => trecatoare(e)
+                    ? seteazaStatus("Serverul se repornește · datele revin singure în câteva secunde")
+                    : seteazaStatus(`Fără legătură cu serverul (${e.message}). Reîncerc…`, true))
+                .finally(() => { actualizareInCurs = false; });
         }
 
         function ceas() {
@@ -1298,8 +1326,12 @@
             porneste();
             setInterval(porneste, REIMPROSPATARE_MS);
             // separat de restul (care e mai greu de cerut): doar pozitiile GPS ale camioanelor
+            let pozitiiInCurs = false;
             setInterval(() => {
-                cere("GET", "/api/pozitii").then(p => { stare.pozitii = p; deseneazaCamioane(); }).catch(() => {});
+                if (pozitiiInCurs) return;
+                pozitiiInCurs = true;
+                cere("GET", "/api/pozitii").then(p => { stare.pozitii = p; deseneazaCamioane(); })
+                    .catch(() => {}).finally(() => { pozitiiInCurs = false; });
             }, POZITII_MS);
         }).catch(e => ecranAcces(`Loginul nu a mers (${e.message}). Reîncarcă pagina.`));
     </script>
