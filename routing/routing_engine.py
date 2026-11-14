@@ -9,6 +9,7 @@ Iesire: rute cu opriri identificate prin id ("depot" sau id-ul pubelei/alertei),
 geometria fiecarei rute, predictii, metrici si avertismente. Functiile nu arunca
 exceptii pentru date proaste: le raporteaza in "warnings", ca demo-ul sa nu pice.
 """
+import json
 import os
 from functools import lru_cache
 
@@ -168,18 +169,18 @@ def _sub(stop, d0, d1):
 def _leg_parts(a, b):
     """Drumul de la a la b ca bucati [(puncte, nume strada)], fiecare strada cu forma ei reala."""
     if _same_edge_ahead(a, b) or a is b:
-        return [(_sub(a, a["off"], b["off"]), _EDGES[a["e"]][4] if a["e"] is not None else "strada fără nume")]
+        return [(_sub(a, a["off"], b["off"]), _EDGES[a["e"]][4] if a["e"] is not None else "strada fără nume", (a["u"], a["v"]))]
     path = _from(a["v"])[1].get(b["u"])
     if path is None:
         return []
     parts = []
     if a["e"] is not None:
-        parts.append((_sub(a, a["off"], a["len"]), _EDGES[a["e"]][4]))
+        parts.append((_sub(a, a["off"], a["len"]), _EDGES[a["e"]][4], (a["u"], a["v"])))
     for u, v in zip(path, path[1:]):
         pts, _, name = _edge_geom(u, v)
-        parts.append((pts, name))
+        parts.append((pts, name, (u, v)))
     if b["e"] is not None:
-        parts.append((_sub(b, 0, b["off"]), _EDGES[b["e"]][4]))
+        parts.append((_sub(b, 0, b["off"]), _EDGES[b["e"]][4], (b["u"], b["v"])))
     return parts
 
 
@@ -187,7 +188,7 @@ def _geometry(stops):
     """Coordonatele [lat, lng] ale strazilor parcurse intre opriri, pentru desenat pe harta."""
     coords = []
     for a, b in zip(stops, stops[1:]):
-        for pts, _ in _leg_parts(a, b):
+        for pts, _, _ in _leg_parts(a, b):
             if coords and pts and coords[-1] == pts[0]:
                 pts = pts[1:]
             coords.extend(pts)
@@ -220,6 +221,95 @@ def _viraj(inainte, dupa):
     return f"usor-{side}" if abs(d) < 50 else side
 
 
+# ---------- benzi: pe ce banda sa se incadreze soferul inainte de intersectie ----------
+
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "benzi_osm.json")) as _f:
+    _BENZI_OSM = json.load(_f)               # din OpenStreetMap, vezi get_benzi.py
+
+# ce marcaje de pe banda se potrivesc fiecarei manevre, in ordinea preferintei
+_BANDA_BUNA = {
+    "stanga": [{"left", "sharp_left"}], "usor-stanga": [{"slight_left"}, {"left"}, {"through"}],
+    "dreapta": [{"right", "sharp_right"}], "usor-dreapta": [{"slight_right"}, {"right"}, {"through"}],
+    "inainte": [{"through"}, {"slight_left", "slight_right"}], "intoarcere": [{"reverse"}, {"left"}],
+}
+
+
+_ORDINE = ["reverse", "sharp_left", "left", "slight_left", "through", "slight_right", "right", "sharp_right"]
+
+
+def _ca_lista(x):
+    return x if isinstance(x, list) else [x]
+
+
+def _benzi(u, v, tip):
+    """Benzile strazii u -> v la capatul ei (de la stanga la dreapta) si pe care sa mearga soferul.
+
+    Intoarce {"benzi": [{"directii": [...], "buna": bool}], "benzi_estimat": bool, "benzi_text": str} sau None.
+    Cand OpenStreetMap are marcajele benzilor (turn:lanes) le folosim direct; cand stim doar cate benzi
+    sunt, aplicam regula din codul rutier: la stanga de pe banda din stanga, la dreapta de pe cea din dreapta.
+    """
+    d = min(_G.get_edge_data(u, v).values(), key=lambda e: e.get("length", 0))
+    ids = [str(i) for i in _ca_lista(d.get("osmid"))]
+    invers = any(str(r) == "True" for r in _ca_lista(d.get("reversed", False)))
+    dublu_sens = str(d.get("oneway")) != "True"
+    sens = ("backward" if invers else "forward") if dublu_sens else None
+
+    turn, n = None, None
+    for i in reversed(ids):                    # strada poate fi facuta din mai multe bucati OSM
+        t = _BENZI_OSM.get(i, {})
+        turn = turn or (t.get(f"turn:lanes:{sens}") if sens else t.get("turn:lanes"))
+        if n is None:
+            try:
+                n = int(t[f"lanes:{sens}"] if sens and f"lanes:{sens}" in t else t["lanes"])
+                if dublu_sens and f"lanes:{sens}" not in t:
+                    n //= 2                    # "lanes" numara ambele sensuri
+            except (KeyError, ValueError):
+                pass
+    estimat = not turn
+    if turn:
+        benzi = []
+        for b in turn.split("|"):
+            dirs = {x.strip() if x.strip() not in ("", "none") else "through" for x in b.split(";")}
+            dirs = [x for x in _ORDINE if x in dirs] or ["through"]   # merge_to_* etc. = inainte
+            benzi.append({"directii": dirs})
+        for bune in _BANDA_BUNA[tip]:
+            potrivite = [bool(bune & set(b["directii"])) for b in benzi]
+            if any(potrivite):
+                break
+        else:
+            estimat, turn = True, None         # marcajele nu se potrivesc cu manevra: regula generala
+            n = len(benzi)
+        if turn:
+            for b, ok in zip(benzi, potrivite):
+                b["buna"] = ok
+    if not turn:
+        if not n or n < 2:
+            return None                        # o singura banda: n-ai ce alege
+        stanga = tip in ("stanga", "usor-stanga", "intoarcere")
+        dreapta = tip in ("dreapta", "usor-dreapta")
+        sageata = {"stanga": "left", "usor-stanga": "slight_left", "intoarcere": "reverse",
+                   "dreapta": "right", "usor-dreapta": "slight_right"}.get(tip, "through")
+        benzi = [{"directii": [sageata if (stanga and k == 0 or dreapta and k == n - 1) else "through"],
+                  "buna": (k == 0) if stanga else (k == n - 1) if dreapta else True} for k in range(n)]
+        if not stanga and not dreapta:
+            return None                        # inainte, fara marcaje: orice banda e buna
+    bune = [k for k, b in enumerate(benzi) if b["buna"]]
+    if len(bune) == len(benzi):
+        return None                            # toate benzile merg: nimic de spus
+    n = len(benzi)
+    if bune == [0]:
+        text = "Încadrează-te pe banda din stânga"
+    elif bune == [n - 1]:
+        text = "Încadrează-te pe banda din dreapta"
+    elif bune[0] == 0:
+        text = f"Încadrează-te pe {'primele ' + str(len(bune)) if len(bune) > 2 else 'primele două'} benzi din stânga"
+    elif bune[-1] == n - 1:
+        text = f"Încadrează-te pe {'ultimele ' + str(len(bune)) if len(bune) > 2 else 'ultimele două'} benzi din dreapta"
+    else:
+        text = "Încadrează-te pe banda din mijloc" if len(bune) == 1 else "Încadrează-te pe benzile din mijloc"
+    return {"benzi": benzi, "benzi_estimat": estimat, "benzi_text": text}
+
+
 def etapa_navigatie(start, dest, nume_dest):
     """Drumul de la start la dest ([lat, lng]) cu instructiuni de condus, ca un GPS.
 
@@ -235,36 +325,42 @@ def etapa_navigatie(start, dest, nume_dest):
         raise ValueError("nu exista drum pe harta intre cele doua puncte")
 
     # bucati de drum grupate pe strazi: fiecare schimbare de strada e o manevra
-    grupuri = []                                  # [nume, [puncte]]
-    for pts, name in parts:
+    grupuri = []                                  # [nume, [puncte], ultima strada (u, v)]
+    for pts, name, edge in parts:
         if len(pts) < 2:                          # bucata de lungime zero
             continue
         if grupuri and grupuri[-1][0] == name:
             grupuri[-1][1].extend(pts[1:])
+            grupuri[-1][2] = edge
         else:
-            grupuri.append([name, pts])
+            grupuri.append([name, pts, edge])
     # bucatile scurte fara nume (benzi de viraj, intersectii) nu sunt manevre de anuntat
     curat = []
-    for name, pts in grupuri:
+    for name, pts, edge in grupuri:
         scurt = sum(_m(p, q) for p, q in zip(pts, pts[1:])) < 40
         if curat and (scurt and name == "strada fără nume" or curat[-1][0] == name):
             curat[-1][1].extend(pts[1:])
+            curat[-1][2] = edge
         else:
-            curat.append([name, pts])
+            curat.append([name, pts, edge])
     grupuri = curat
 
     coords = [list(start)]
     pasi = []
-    for i, (name, pts) in enumerate(grupuri):
+    for i, (name, pts, _) in enumerate(grupuri):
+        benzi = None
         if i == 0:
             tip, text = "start", f"Pornește pe {name}"
         else:
             prev = grupuri[i - 1][1]
             tip = _viraj(_bearing(prev[-2], prev[-1]), _bearing(pts[0], pts[1]))
             text = f"{_VIRAJ[tip]} pe {name}"
+            benzi = _benzi(*grupuri[i - 1][2], tip)
         la = sum(_m(p, q) for p, q in zip(coords, coords[1:])) + _m(coords[-1], pts[0])
-        pasi.append({"tip": tip, "text": text, "strada": name, "la_m": round(la),
-                     "lat": pts[0][0], "lng": pts[0][1]})
+        pas = {"tip": tip, "text": text, "strada": name, "la_m": round(la), "lat": pts[0][0], "lng": pts[0][1]}
+        if benzi:
+            pas.update(benzi)
+        pasi.append(pas)
         coords.extend(pts)
     if not grupuri:                               # deja la oprire
         coords.append(b["proj"])
