@@ -86,7 +86,8 @@ export default function App() {
   if (sesiune.activ && !sesiune.logat) return <div className="app"><EcranLogin s={sesiune} /></div>
   // fiecare rol vede doar partea lui: dispecerul lucreaza in dashboard, soferul doar cu ruta lui
   if (sesiune.activ && sesiune.roluri.includes('admin')) {
-    location.replace('/dispecer/')
+    // doar daca nu suntem deja acolo (altfel, cu o versiune veche in cache, s-ar invarti in cerc)
+    if (!location.pathname.startsWith('/dispecer')) location.replace('/dispecer/')
     return <div className="app"><div className="login"><p>Te ducem la dispecerat…</p></div></div>
   }
   const doarSofer = sesiune.activ && sesiune.roluri.includes('sofer')

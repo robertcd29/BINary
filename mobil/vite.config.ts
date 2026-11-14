@@ -7,6 +7,9 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // aplicatia nu are voie sa "inghita" celelalte pagini de pe acelasi server: dashboard-ul,
+      // API-ul si pozele trebuie sa vina mereu de la server, nu din cache-ul aplicatiei
+      workbox: { navigateFallbackDenylist: [/^\/dispecer/, /^\/api/, /^\/captures/] },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'BINary',
