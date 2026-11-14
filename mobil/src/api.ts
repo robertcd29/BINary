@@ -113,7 +113,13 @@ export type NavStep = {
   distanta_m: number  // cat tine pana la urmatoarea manevra
   lat: number
   lng: number
+  // benzile strazii inainte de manevra (de la stanga la dreapta) si pe care sa mearga soferul
+  benzi?: { directii: LaneDir[]; buna: boolean }[]
+  benzi_estimat?: boolean   // fara marcaje in OpenStreetMap: dupa regula generala din codul rutier
+  benzi_text?: string
 }
+
+export type LaneDir = 'reverse' | 'sharp_left' | 'left' | 'slight_left' | 'through' | 'slight_right' | 'right' | 'sharp_right'
 
 export type NavLeg = {
   geometrie: [number, number][]

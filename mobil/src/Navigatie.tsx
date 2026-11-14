@@ -1,8 +1,8 @@
 // Navigatie pas cu pas pentru sofer, ca un GPS: instructiunea urmatoare, distanta pana la viraj,
 // voce in romana, harta care urmareste camionul si recalcularea traseului cand iese de pe el.
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { CircleMarker, Polygon, Polyline, useMap } from 'react-leaflet'
+import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, Compass, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
   Navigation2, Play, Square, Undo2, Volume2, VolumeX
@@ -16,13 +16,14 @@ const VIEW_LABEL: Record<ViewMode, string> = {
 
 import {
   getNavigation, sendDriverPosition,
-  type Coordinates, type Navigation, type NavStep, type NavStop
+  type Coordinates, type LaneDir, type Navigation, type NavStep, type NavStop
 } from './api'
 
 const OFF_ROUTE_M = 50          // mai departe de atat de traseu = a luat-o pe alt drum
 const REROUTE_EVERY_MS = 10_000 // nu recalculam mai des de atat
 const ARRIVED_M = 30            // la 30 m de oprire consideram ca a ajuns
 const ANNOUNCE_M = 150          // virajul se anunta cu vocea de la aceasta distanta
+const LANES_M = 500             // benzile apar (si se anunta) de la aceasta distanta de intersectie
 const TRUCK_SPEED_MS = 5.5      // ~20 km/h, viteza medie a unui camion de gunoi prin oras
 const SIM_STEP_M = 20           // simulare: cati metri inainteaza camionul la fiecare pas (~180 km/h, ca demo-ul sa nu dureze)
 const SIM_TICK_MS = 400
@@ -85,33 +86,6 @@ function pointAt(line: [number, number][], cum: number[], d: number): Coordinate
     lng: line[i][1] + t * (line[i + 1][1] - line[i][1])
   }
 }
-
-/** Bucata de traseu dintre distantele d0 si d1, cu toate curbele ei. */
-function slice(line: [number, number][], cum: number[], d0: number, d1: number): [number, number][] {
-  const a = pointAt(line, cum, d0), b = pointAt(line, cum, d1)
-  return [[a.lat, a.lng], ...line.filter((_, i) => cum[i] > d0 && cum[i] < d1), [b.lat, b.lng]]
-}
-
-const ARROW_BEFORE_M = 30       // sageata de viraj incepe cu atatia metri inainte de intersectie
-const ARROW_AFTER_M = 24        // ...si se termina cu varful pe strada pe care intri
-const ARROW_HEAD_M = 13
-
-/** Sageata desenata pe strada, la intersectie: coada pe drumul de acum, varful pe strada noua (ca la Google Maps). */
-function turnArrow(line: [number, number][], cum: number[], at: number) {
-  const total = cum[cum.length - 1]
-  const d1 = Math.min(total, at + ARROW_AFTER_M)
-  const shaft = slice(line, cum, Math.max(0, at - ARROW_BEFORE_M), d1)
-  const end = pointAt(line, cum, d1)
-  const back = pointAt(line, cum, Math.max(0, d1 - 5))
-  const dir = bearing(back, end)
-  const tip = ahead(end, dir, ARROW_HEAD_M)
-  const left = ahead(end, dir - 90, ARROW_HEAD_M * 0.75)
-  const right = ahead(end, dir + 90, ARROW_HEAD_M * 0.75)
-  const head: [number, number][] = [[left.lat, left.lng], [tip.lat, tip.lng], [right.lat, right.lng]]
-  return { shaft, head }
-}
-
-const TURNS = new Set<NavStep['tip']>(['inainte', 'stanga', 'dreapta', 'usor-stanga', 'usor-dreapta', 'intoarcere'])
 
 // ---------- texte ----------
 
@@ -245,6 +219,9 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     if (toNext <= ANNOUNCE_M && !announced.current.has(key) && !arrived) {
       announced.current.add(key)
       speak(next.tip === 'sosire' ? `Ajungi la ${next.strada}` : next.text)
+    } else if (next.benzi_text && toNext <= LANES_M && toNext > ANNOUNCE_M + 50 && !announced.current.has(`b${key}`)) {
+      announced.current.add(`b${key}`)
+      speak(`${next.benzi_text}, apoi ${next.text.charAt(0).toLowerCase()}${next.text.slice(1)}`)
     }
   }, [started, voice, next, stepIndex, toNext, arrived])
   useEffect(() => {
@@ -512,17 +489,6 @@ export function NavLayer({ n }: { n: NavState }) {
     }
   }, [map])
 
-  // sagetile de viraj: pe urmatoarele intersectii din etapa curenta
-  const leg = n.leg
-  const arrows = useMemo(() => {
-    if (!leg || leg.geometrie.length < 2) return []
-    const cum = [0]
-    for (let i = 1; i < leg.geometrie.length; i++) cum.push(cum[i - 1] + meters(leg.geometrie[i - 1], leg.geometrie[i]))
-    return leg.pasi.filter((p, i) => i > n.stepIndex && TURNS.has(p.tip))
-      .slice(0, 3)
-      .map(p => turnArrow(leg.geometrie, cum, p.la_m))
-  }, [leg, n.stepIndex])
-
   // strat propriu deasupra traseului verde (care se poate incarca dupa); il punem langa celelalte
   // straturi, in panoul care se roteste, altfel n-ar urma rotirea hartii
   if (!map.getPane(NAV_PANE)) {
@@ -535,21 +501,46 @@ export function NavLayer({ n }: { n: NavState }) {
     <>
       <Polyline pane={NAV_PANE} positions={n.leg.geometrie} pathOptions={{ color: '#fff', weight: 12, opacity: 0.9 }} />
       <Polyline pane={NAV_PANE} positions={n.leg.geometrie} pathOptions={{ color: '#2463eb', weight: 7 }} />
-      {arrows.map((a, i) => (
-        <Fragment key={i}>
-          <Polyline pane={NAV_PANE} positions={a.shaft} interactive={false}
-            pathOptions={{ color: '#0b2f7a', weight: 15, lineCap: 'butt', lineJoin: 'round' }} />
-          <Polygon pane={NAV_PANE} positions={a.head} interactive={false}
-            pathOptions={{ color: '#0b2f7a', weight: 3, fillColor: '#fff', fillOpacity: 1, lineJoin: 'round' }} />
-          <Polyline pane={NAV_PANE} positions={a.shaft} interactive={false}
-            pathOptions={{ color: '#fff', weight: 9, lineCap: 'butt', lineJoin: 'round' }} />
-        </Fragment>
-      ))}
       {n.next && n.next.tip !== 'sosire' && (
         <CircleMarker pane={NAV_PANE} center={[n.next.lat, n.next.lng]} radius={6}
           pathOptions={{ color: '#fff', weight: 2, fillColor: '#2463eb', fillOpacity: 1 }} />
       )}
     </>
+  )
+}
+
+// ---------- benzi: marcajele de pe asfalt, ca pe indicatoarele de deasupra drumului ----------
+
+const LANE_PATHS: Record<LaneDir, string> = {
+  through: 'M12 22V5 M7.5 9.5 12 5l4.5 4.5',
+  left: 'M12 22v-8a4 4 0 0 0-4-4H5 M8.5 6.5 5 10l3.5 3.5',
+  sharp_left: 'M12 22V9 M12 9 5.5 15.5 M5.5 10.5v5h5',
+  right: 'M12 22v-8a4 4 0 0 1 4-4h3 M15.5 6.5 19 10l-3.5 3.5',
+  sharp_right: 'M12 22V9 M12 9l6.5 6.5 M18.5 10.5v5h-5',
+  slight_left: 'M12 22v-7L6.5 8.5 M6.5 13.5v-5h5',
+  slight_right: 'M12 22v-7l5.5-6.5 M17.5 13.5v-5h-5',
+  reverse: 'M12 22V10a3.5 3.5 0 0 0-7 0v5 M2 12l3 3.5L8 12',
+}
+
+// ce sageti de pe banda corespund manevrei (cele aprinse)
+const GOOD_DIRS: Record<NavStep['tip'], LaneDir[]> = {
+  stanga: ['left', 'sharp_left'], 'usor-stanga': ['slight_left', 'left', 'through'],
+  dreapta: ['right', 'sharp_right'], 'usor-dreapta': ['slight_right', 'right', 'through'],
+  inainte: ['through', 'slight_left', 'slight_right'], intoarcere: ['reverse', 'left'], start: [], sosire: [],
+}
+
+function goodDirs(tip: NavStep['tip'], dirs: LaneDir[]) {
+  const ok = dirs.filter(d => GOOD_DIRS[tip].includes(d))
+  return ok.length ? [ok[0]] : dirs
+}
+
+function LaneIcon({ dirs, good }: { dirs: LaneDir[]; good: LaneDir[] }) {
+  // sagetile care nu ne trebuie se deseneaza intai, estompate; cea buna deasupra
+  const order = [...dirs].sort((a, b) => Number(good.includes(a)) - Number(good.includes(b)))
+  return (
+    <svg viewBox="0 0 24 24" width="30" height="30" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {order.map(d => <path key={d} d={LANE_PATHS[d]} stroke={good.includes(d) ? '#fff' : '#ffffff47'} />)}
+    </svg>
   )
 }
 
@@ -568,12 +559,17 @@ export function NavTopBar({ n }: { n: NavState }) {
     document.body.classList.toggle('nav-active', on)
     return () => document.body.classList.remove('nav-active')
   }, [on])
+  // ...exact cat e de inalta bara (creste cand apar benzile), ca sa nu acopere nimic
+  const bar = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (bar.current) document.body.style.setProperty('--nav-bar-h', `${bar.current.offsetHeight}px`)
+  })
 
   if (!on || !n.stop) return null
 
   if (n.arrived || !n.next) {
     return (
-      <div className="nav-topbar arrived" role="status" aria-live="polite">
+      <div ref={bar} className="nav-topbar arrived" role="status" aria-live="polite">
         <div className="nav-topbar-main">
           <div className="nav-topbar-icon"><Flag size={40} /></div>
           <div className="nav-topbar-text">
@@ -588,10 +584,11 @@ export function NavTopBar({ n }: { n: NavState }) {
 
   const next = n.next
   const strada = next.tip === 'sosire' ? n.stop.nume : next.strada
-  const showThen = n.then && n.then.tip !== 'sosire' && next.distanta_m <= 400
+  const showLanes = !!next.benzi && n.toNext <= LANES_M
+  const showThen = !showLanes && n.then && n.then.tip !== 'sosire' && next.distanta_m <= 400
 
   return (
-    <div className="nav-topbar" role="status" aria-live="polite">
+    <div ref={bar} className="nav-topbar" role="status" aria-live="polite">
       <div className="nav-topbar-main">
         <div className="nav-topbar-icon"><ManeuverIcon tip={next.tip} size={44} /></div>
         <div className="nav-topbar-text">
@@ -604,6 +601,18 @@ export function NavTopBar({ n }: { n: NavState }) {
           <small>{formatDistance(n.remaining)}</small>
         </div>
       </div>
+      {showLanes && next.benzi && (
+        <div className="lanes" aria-label={next.benzi_text}>
+          <div className="lanes-road">
+            {next.benzi.map((b, i) => (
+              <span key={i} className={`lane${b.buna ? ' good' : ''}`}>
+                <LaneIcon dirs={b.directii} good={b.buna ? goodDirs(next.tip, b.directii) : []} />
+              </span>
+            ))}
+          </div>
+          <span className="lanes-text">{next.benzi_text}</span>
+        </div>
+      )}
       {showThen && n.then && (
         <div className="nav-topbar-then">
           Apoi <ManeuverIcon tip={n.then.tip} size={16} /> {n.then.strada}
