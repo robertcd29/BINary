@@ -16,7 +16,8 @@ from pydantic import BaseModel
 load_dotenv()
 client = genai.Client(
     api_key=os.environ["GEMINI_API_KEY"],
-    http_options=types.HttpOptions(api_version="v1beta"),   # raspunsul in JSON merge doar pe v1beta
+    # raspunsul in JSON merge doar pe v1beta; timeout ca cetateanul sa nu astepte la nesfarsit
+    http_options=types.HttpOptions(api_version="v1beta", timeout=15_000),
 )
 MODEL = "gemini-3.5-flash-lite"         # rapid (~1,5 s): decide singur pozele clare
 MODEL_ATENT = "gemini-3.5-flash"        # mai lent (~10 s), dar mai atent: doar pentru pozele la limita
@@ -73,8 +74,8 @@ def pregateste(imagine: Image.Image) -> Image.Image:
     return imagine
 
 
-def _intreaba(model: str, imagine: Image.Image) -> Verdict:
-    for incercare in range(3):
+def _intreaba(model: str, imagine: Image.Image, incercari: int = 2) -> Verdict:
+    for incercare in range(incercari):
         try:
             raspuns = client.models.generate_content(
                 model=model,
@@ -88,20 +89,22 @@ def _intreaba(model: str, imagine: Image.Image) -> Verdict:
                 ),
             )
             return raspuns.parsed
-        except (errors.ServerError, errors.ClientError) as e:
-            if incercare == 2:
+        except Exception as e:          # eroare Google, limita de cereri sau timeout
+            if incercare == incercari - 1:
                 raise
-            print("  reîncerc după eroare", e.code)
-            time.sleep(5 * (incercare + 1))
+            print("  reîncerc după eroare", getattr(e, "code", e))
+            time.sleep(1)
 
 
 def verifica(imagine: Image.Image) -> dict:
+    start = time.monotonic()
     imagine = pregateste(imagine)
     v = _intreaba(MODEL, imagine)
-    if v.incredere < SIGUR:             # poza la limita: a doua parere, de la modelul atent
+    # poza la limita: a doua parere, de la modelul atent, doar daca mai e timp (cetateanul asteapta)
+    if v.incredere < SIGUR and time.monotonic() - start < 8:
         try:
-            v = _intreaba(MODEL_ATENT, imagine)
-        except (errors.ServerError, errors.ClientError):
+            v = _intreaba(MODEL_ATENT, imagine, incercari=1)
+        except Exception:
             pass                        # ramane verdictul modelului rapid
     valid = v.e_gunoi and v.incredere >= PRAG
     if valid:
