@@ -708,12 +708,17 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
 
     predictions, groups, overflow_risk, mandatory = {}, [], set(), set()
     for nodes, b, fill in zip(nodes_of, used, fills):
-        rate, hours_to_full = estimate(history.get(b["id"], []))
+        rate, _ = estimate(history.get(b["id"], []))
+        # orele pana la plin se socotesc din umplerea de ACUM (nu din ultima citire din istoric),
+        # ca predictia sa fie aceeasi cu ce vede dispecerul pe harta
+        hours_to_full = None if rate is None else max(0.0, (1.0 - fill) / rate)
         predictions[b["id"]] = {
             "hours_to_full": None if hours_to_full is None else round(hours_to_full, 1),
             "predicted_fill_24h": round(min(1.0, fill + (rate or 0) * HORIZON_H), 2),
         }
-        will_overflow = hours_to_full is not None and hours_to_full <= HORIZON_H
+        # o ghena aproape goala nu trimite camionul doar pe baza predictiei: istoricul unui senzor
+        # umplut si golit la teste ar parea o umplere foarte rapida
+        will_overflow = hours_to_full is not None and hours_to_full <= HORIZON_H and fill >= MIN_FILL
         if will_overflow:
             overflow_risk.add(b["id"])
         if fill >= MANDATORY_FILL or will_overflow:
