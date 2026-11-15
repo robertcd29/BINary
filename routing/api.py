@@ -127,6 +127,10 @@ ZONA_CAMION.update({bid: zona_pentru(b["lat"], b["lon"]) for bid, b in SIM.items
 RECICLABILE = {bid for bid, b in SIM.items() if b.get("deseu") == "reciclabil"} | {"TM-015"}
 CAMIOANE_PUBELA = {bid: [CAMION_RECICLABIL[z] if bid in RECICLABILE else CAMION_MENAJER[z]]
                    for bid, z in ZONA_CAMION.items()}
+# daca o ghena obligatorie nu mai incape in camionul zonei ei, o poate lua alt camion de acelasi tip
+# (menajer sau reciclabil) care mai are loc, inainte ca vreun camion sa faca o cursa in plus la groapa
+CAMIOANE_REZERVA = {bid: [c for c in (CAMION_RECICLABIL if bid in RECICLABILE else CAMION_MENAJER).values()
+                          if c not in t] for bid, t in CAMIOANE_PUBELA.items()}
 
 router = APIRouter(prefix="/api")
 _lock = threading.Lock()        # planul e unul singur si e modificat din mai multe fire
@@ -270,7 +274,8 @@ def _became_urgent(bin_row, level):
         return _event({"id": bid, "status": "urgenta", "reason": "e deja pe o ruta"})
     r = engine.add_alert(plan, {"id": bid, "lat": bin_row["lat"], "lng": bin_row["lng"],
                                 "volum_l": round(engine.DEFAULT_BIN_CAPACITY_L * level / 100),
-                                "camioane": CAMIOANE_PUBELA.get(bid)}, kind="bin")
+                                "camioane": CAMIOANE_PUBELA.get(bid),
+                                "camioane_rezerva": CAMIOANE_REZERVA.get(bid)}, kind="bin")
     if r["status"] == "assigned":
         # inserarea poate cadea si printre opririle deja facute: refacem ordinea celor ramase
         # (si descarcarile) pornind de unde e camionul acum, ca ghena sa fie luata din drum
@@ -441,10 +446,10 @@ def _build_plan(conn):
     # sa le puna unde se potrivesc in ruta (nu doar lipite dupa); oricare camion le poate lua
     alerte = conn.execute("""SELECT * FROM rutare_alerte WHERE status IN ('deschisa', 'asignata')
                              ORDER BY creata""").fetchall()
-    puncte = [{"id": a["id"], "lat": a["lat"], "lng": a["lng"], "umplere": 100,
+    puncte = [{"id": a["id"], "lat": a["lat"], "lng": a["lng"], "umplere": 100, "compactare": False,
                "capacitate_l": a["volum_l"] or engine.ALERT_SIZES_L["medie"]} for a in alerte]
     zone = {**CAMIOANE_PUBELA, **{a["id"]: CAMIOANE_MENAJERE for a in alerte}}
-    plan = engine.plan_routes(bins + puncte, history, compare_baseline=True, zone=zone)
+    plan = engine.plan_routes(bins + puncte, history, compare_baseline=True, zone=zone, rezerva=CAMIOANE_REZERVA)
     for bid, s in surse.items():
         if s["sursa"] != "senzor":
             plan["warnings"].append(f"{bid}: {s['motiv']}")

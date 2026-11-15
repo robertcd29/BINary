@@ -40,6 +40,11 @@ ALERT_SIZES_L = {"mica": 100, "medie": 500, "mare": 1500}   # raportari de la ce
 # Capatul de nord al Caii Torontalului, spre iesirea din oras: de inlocuit cu locul real, daca e altul.
 GROAPA = {"lat": 45.7846838, "lng": 21.2019655, "nume": "Groapa de gunoi", "adresa": "Calea Torontalului, Timișoara"}
 CAPACITATE_UTILA_L = int(TRUCK_CAPACITY_L * (1 - RESERVE))   # peste atat camionul merge sa descarce
+# Camionul de gunoi compacteaza ce strange: deseurile menajere stau afanate in ghena (~100-150 kg/m3),
+# iar presa unui camion compactor le aduce la ~350-500 kg/m3, adica de ~3-4 ori mai putin volum.
+# Luam 3, capatul prudent. Volumul unei ghene se imparte la COMPACTARE cand intra in camion
+# (depozitarile ilegale raman cu volumul lor: mobila, moloz, saci voluminosi nu se compacteaza la fel).
+COMPACTARE = 3
 MAX_CURSE = 3                    # de cate ori se poate umple un camion intr-o zi (cu descarcari intre ele)
 
 _G = ox.load_graphml(GRAPH_FILE)
@@ -738,8 +743,11 @@ def _seteaza_ruta(plan, r, stops):
 
 # ---------- API public ----------
 
-def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECONDS, zone=None):
-    """zone = {id pubela: [camioane]}, optional: fiecare pubela e colectata doar de camioanele zonei ei."""
+def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECONDS, zone=None, rezerva=None):
+    """zone = {id pubela: [camioane]}, optional: fiecare pubela e colectata doar de camioanele zonei ei.
+    rezerva = {id pubela: [camioane]}, optional: camioanele (de acelasi tip) care pot lua o pubela
+    obligatorie care nu mai incape in camionul zonei ei, inainte ca vreun camion sa faca mai multe curse.
+    Un pubela poate avea "compactare": False (depozitarile ilegale): volumul ei nu se compacteaza."""
     history = history or {}
     warnings = []
     depot, _ = _snap(DEPOT["lat"], DEPOT["lng"])
@@ -758,8 +766,9 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     fills = [b["umplere"] / 100 for b in used]
     demands = [0] * len(stops)
     for nodes, f, b in zip(nodes_of, fills, used):
+        k = COMPACTARE if b.get("compactare", True) else 1     # cat ocupa in camion, dupa presa
         for n in nodes:
-            demands[n] = round(f * b.get("capacitate_l", DEFAULT_BIN_CAPACITY_L))
+            demands[n] = round(f * b.get("capacitate_l", DEFAULT_BIN_CAPACITY_L) / k)
 
     predictions, groups, overflow_risk, mandatory = {}, [], set(), set()
     for nodes, b, fill in zip(nodes_of, used, fills):
@@ -790,11 +799,32 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
 
     zone_idx = {n: [t for t in zone[b["id"]] if 0 <= t < NUM_TRUCKS]
                 for nodes, b in zip(nodes_of, used) if zone and b["id"] in zone for n in nodes}
+
+    def nepreluate(visited):
+        return [(nodes, b) for nodes, b in zip(nodes_of, used) if b["id"] in mandatory and not visited & set(nodes)]
+
     routes, _, visited = _solve(M, demands, groups, CAPACITATE_UTILA_L, seconds, zone=zone_idx)
-    if any(b["id"] in mandatory and not visited & set(nodes) for nodes, b in zip(nodes_of, used)):
-        # ghenele obligatorii nu incap intr-o singura cursa: camioanele fac mai multe curse
-        # (cand se umplu merg la groapa si continua); solverul nu vede ocolul pana la groapa,
-        # deci il lasam sa faca asta doar cand chiar e nevoie
+    mutate = set()
+    # 1) o ghena obligatorie care nu incape in camionul zonei ei poate fi luata de alt camion de
+    #    acelasi tip care mai are loc (cate o runda, pana nu mai ajuta)
+    for _ in range(3):
+        lipsa = [(nodes, b) for nodes, b in nepreluate(visited) if rezerva and rezerva.get(b["id"])]
+        if not lipsa:
+            break
+        for nodes, b in lipsa:
+            extra = [t for t in rezerva[b["id"]] if 0 <= t < NUM_TRUCKS]
+            for n in nodes:
+                if n in zone_idx:
+                    zone_idx[n] = sorted(set(zone_idx[n]) | set(extra))
+            mutate.add(b["id"])
+        inainte = len(nepreluate(visited))
+        routes, _, visited = _solve(M, demands, groups, CAPACITATE_UTILA_L, seconds, zone=zone_idx)
+        if len(nepreluate(visited)) >= inainte:
+            break
+    if nepreluate(visited):
+        # 2) ultima solutie: nici flota nu are loc intr-o singura cursa, deci camioanele fac mai multe
+        #    curse (cand se umplu merg la groapa si continua); solverul nu vede ocolul pana la groapa,
+        #    deci il lasam sa faca asta doar cand chiar e nevoie
         routes, _, visited = _solve(M, demands, groups, CAPACITATE_UTILA_L * MAX_CURSE, seconds, zone=zone_idx)
 
     # locul ales pentru fiecare pubela vizitata (sensul strazii); cele sarite raman pe varianta preferata
@@ -826,6 +856,9 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         "bins_skipped": len(used) - len(vizitate),
         "overflows_prevented": len(overflow_risk & vizitate),
         "mandatory_unserved": len(unserved),
+        # ghene obligatorii luate de alt camion de acelasi tip, fiindca al zonei era plin
+        "bins_reassigned": sum(1 for r in routes for s in r["stops"]
+                               if s in mutate and r["truck"] not in (zone or {}).get(s, [])),
     }
     if compare_baseline:
         # referinta = colectarea tuturor pubelelor fara optimizare (din aproape in aproape, cum ar
@@ -882,6 +915,8 @@ def add_alert(plan, alert, kind="alert"):
     volume = alert.get("volum_l")
     if volume is None:
         volume = ALERT_SIZES_L.get(alert.get("marime", "medie"), ALERT_SIZES_L["medie"])
+    # cat ocupa in camion: o ghena se compacteaza, o depozitare ilegala nu
+    incarcare = round(volume / COMPACTARE) if kind == "bin" else volume
     try:
         variante, off = _variante(float(alert["lat"]), float(alert["lng"]))
     except (KeyError, TypeError, ValueError):
@@ -890,19 +925,38 @@ def add_alert(plan, alert, kind="alert"):
         return {"id": alert["id"], "status": "rejected", "reason": f"la {off:.0f} m de harta"}
 
     st = plan["_stops"]
+
+    def cel_mai_bun(camioane, limita):
+        best = None
+        for r in plan["routes"]:
+            if r["load_l"] + incarcare > limita:
+                continue
+            if camioane is not None and r["truck"] not in camioane:
+                continue
+            s = r["stops"]
+            for k in range(len(s) - 1):
+                a, b = st[s[k]], st[s[k + 1]]
+                for x in variante:           # oricare sens al strazii, cel mai ieftin (cu tot cu viraje)
+                    cost = _leg(a, x) + _leg(x, b) - _leg(a, b)
+                    if best is None or cost < best[0]:
+                        best = (cost, r, k + 1, x)
+        return best
+
+    # ordinea: camionul zonei daca mai are loc; altfel alt camion de acelasi tip care mai are loc;
+    # abia apoi o cursa in plus pana la groapa (camionul zonei, apoi celelalte de acelasi tip)
+    zona = alert.get("camioane") or None             # None = oricare camion
+    rezerva = alert.get("camioane_rezerva") or None
+    trepte = [(zona, CAPACITATE_UTILA_L)]
+    if rezerva:
+        trepte.append((rezerva, CAPACITATE_UTILA_L))
+    trepte.append((zona, CAPACITATE_UTILA_L * MAX_CURSE))
+    if rezerva:
+        trepte.append((rezerva, CAPACITATE_UTILA_L * MAX_CURSE))
     best = None
-    for r in plan["routes"]:
-        if r["load_l"] + volume > CAPACITATE_UTILA_L * MAX_CURSE:
-            continue                     # camionul ar trebui sa se umple de prea multe ori azi
-        if alert.get("camioane") and r["truck"] not in alert["camioane"]:
-            continue                     # pubela dintr-o zona: doar camioanele zonei ei
-        s = r["stops"]
-        for k in range(len(s) - 1):
-            a, b = st[s[k]], st[s[k + 1]]
-            for x in variante:               # oricare sens al strazii, cel mai ieftin (cu tot cu viraje)
-                cost = _leg(a, x) + _leg(x, b) - _leg(a, b)
-                if best is None or cost < best[0]:
-                    best = (cost, r, k + 1, x)
+    for camioane, limita in trepte:
+        best = cel_mai_bun(camioane, limita)
+        if best is not None:
+            break
 
     result = {"id": alert["id"], "kind": kind, "lat": alert["lat"], "lng": alert["lng"],
               "volum_l": volume}
@@ -917,11 +971,11 @@ def add_alert(plan, alert, kind="alert"):
     extra = _leg_m(a, x) + _leg_m(x, b) - _leg_m(a, b)     # metrii reali in plus
     dedicated = len(route["stops"]) == 2
     st[alert["id"]] = x
-    plan.setdefault("_vol", {})[alert["id"]] = volume
+    plan.setdefault("_vol", {})[alert["id"]] = incarcare
     route["stops"].insert(pos, alert["id"])
     route["geometry"] = _draw(plan, route["stops"])
     route["distance_m"] += int(extra)
-    route["load_l"] += volume
+    route["load_l"] += incarcare
     plan["total_distance_m"] += int(extra)
     m = plan["metrics"]
     m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
