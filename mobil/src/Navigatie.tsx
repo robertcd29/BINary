@@ -208,19 +208,23 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   }, [position])
 
   const hasNav = useRef(false)
-  const refresh = useCallback(async (from?: Coordinates | null) => {
+  // from = 'depou': drumul porneste din depou, nu de unde e telefonul (traseul reluat in demo)
+  const refresh = useCallback(async (from?: Coordinates | null | 'depou'): Promise<Navigation | null> => {
     setLoading(true)
     try {
       const h = moveHeading.current
       const heading = h && Date.now() - h.at < HEADING_FRESH_MS ? h.deg : null
-      setNav(await getNavigation(truckId, from ?? positionRef.current, heading))
+      const nv = await getNavigation(truckId, from === 'depou' ? null : from ?? positionRef.current, heading)
+      setNav(nv)
       hasNav.current = true
       setError('')
+      return nv
     } catch (e) {
       // serverul a cazut cateva secunde (ex. 502 la un deploy): soferul ramane pe navigatia pe care o are
-      if (hasNav.current && isTransient(e)) return
+      if (hasNav.current && isTransient(e)) return null
       // alta eroare: cu o navigatie deja pe ecran, ea ramane, iar mesajul apare mic in card
       setError(e instanceof Error ? e.message : 'Nu s-a putut calcula navigația.')
+      return null
     } finally {
       setLoading(false)
     }
@@ -236,6 +240,8 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
 
   const leg = nav?.etape[0] ?? null
   const stop: NavStop | null = nav?.opriri[0] ?? null
+  // cate opriri mai are de facut (fara depou); 0 = ruta e incheiata
+  const stopsLeft = nav ? nav.opriri.filter(o => o.tip !== 'depou').length : null
   const cum = useMemo(() => {
     if (!leg) return []
     const c = [0]
@@ -276,6 +282,7 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
   const offSince = useRef<number | null>(null)
   useEffect(() => {
     if (!position || !leg) return
+    if (!started && stopsLeft === 0) return     // ruta incheiata: nu mai recalculam nimic singuri
     const badGps = !simulating && accuracy !== null && accuracy > BAD_GPS_M
     if (progress.off < OFF_ROUTE_M || badGps) {
       if (progress.off < OFF_ROUTE_M) offSince.current = null
@@ -289,7 +296,7 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     offSince.current = null
     if (started && voice) speak('Recalculez traseul')
     refresh(position)
-  }, [started, position, leg, progress.off, voice, refresh, accuracy, simulating])
+  }, [started, position, leg, progress.off, voice, refresh, accuracy, simulating, stopsLeft])
 
   // vocea: fiecare manevra se anunta o data cand se apropie, iar sosirea o data
   const announced = useRef(new Set<string>())
@@ -317,7 +324,27 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     }
   }, [started, voice, arrived, stop])
 
-  // inapoi la depou, cu toate opririle facute: navigatia (si simularea) se opresc singure
+  function finish() {
+    resumePending.current = false
+    setStarted(false)
+    setSimulating(false)
+  }
+
+  // ultima oprire bifata: ruta e incheiata pe loc. Inainte navigatia mergea mai departe spre depou,
+  // pe tot ecranul si fara bara de jos, si se oprea doar cand GPS-ul confirma sosirea la depou;
+  // fara GPS (sau dupa simulare, cand pozitia sare la GPS-ul real) nu se mai oprea niciodata.
+  // Drumul spre depou ramane la un buton distanta, pe ecranul "Rută încheiată".
+  const prevLeft = useRef<number | null>(null)
+  useEffect(() => {
+    const before = prevLeft.current
+    prevLeft.current = stopsLeft
+    if (stopsLeft === 0 && before !== null && before > 0 && started) {
+      finish()
+      if (voice) speak('Rută încheiată. Toate opririle sunt făcute.')
+    }
+  }, [stopsLeft]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // inapoi la depou (navigatie pornita din ecranul de final): se opreste singura la sosire
   const atDepot = started && arrived && stop?.tip === 'depou'
   useEffect(() => {
     if (!atDepot) return
@@ -400,7 +427,7 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
     rotated: started && follow && viewMode !== 'nord',
     tilted: started && follow && viewMode === '3d',
     current, next, then: leg?.pasi[stepIndex + 2] ?? null, toNext, remaining, arrived, etaMin, stepIndex,
-    refresh, start,
+    refresh, start, stopsLeft,
     stop_: () => { resumePending.current = false; setStarted(false); setSimulating(false); window.speechSynthesis?.cancel() },
     setVoice, setFollow,
     toggleSim: () => {
@@ -413,9 +440,21 @@ export function useNavigation(truckId: string, gps: Coordinates | null, enabled:
 
 // ---------- interfata ----------
 
-export function NavCard({ n, onComplete }: {
+/** Ce stie cardul despre ziua soferului, pentru ecranul de final de traseu. */
+export type DaySummary = {
+  opriri: number      // ghene + depozitari facute
+  distanta_m: number
+  litri: number
+  lastCheck: Date | null              // ultima verificare a rutei la server
+  onCheck: () => Promise<number>      // verifica acum; intoarce cate opriri noi au aparut
+  onShowStops: () => void
+  onReplay: () => Promise<void>
+}
+
+export function NavCard({ n, onComplete, day }: {
   n: NavState
   onComplete: (stop: NavStop) => Promise<void>
+  day?: DaySummary
 }) {
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState('')
@@ -431,22 +470,9 @@ export function NavCard({ n, onComplete }: {
 
   const ramase = n.nav.opriri.filter(o => o.tip !== 'depou').length
 
-  // toate opririle facute si camionul e la depou: ziua s-a terminat, nu mai e nimic de pornit
-  if (!n.started && ramase === 0 && n.remaining <= ARRIVED_M * 2) {
-    return (
-      <section className="panel nav-card preview">
-        <span className="sheet-handle" aria-hidden="true" />
-        <div className="nav-destination">
-          <span className="dest-badge depou" aria-hidden="true"><Flag size={20} /></span>
-          <div>
-            <small>Toate opririle sunt făcute</small>
-            <strong>Traseul de azi e gata</strong>
-            <small>Camionul e la depou</small>
-          </div>
-        </div>
-      </section>
-    )
-  }
+  // ruta incheiata: toate opririle facute. Nu depinde de unde e telefonul (dupa simulare pozitia
+  // revine la GPS-ul real, care poate fi oriunde), iar soferul are mereu ce face mai departe
+  if (!n.started && ramase === 0) return <RouteDone n={n} day={day} />
 
   async function done() {
     if (!n.stop) return
@@ -533,6 +559,72 @@ export function NavCard({ n, onComplete }: {
           Google Maps ↗
         </a>
       </div>
+    </section>
+  )
+}
+
+/** Ecranul "Rută încheiată": rezumatul zilei, drumul spre depou si verificarea rutei la server
+ *  (singura la 30 de secunde, din DriverView, sau la buton). Cand dispecerul adauga opriri noi,
+ *  navigatia se reincarca si cardul obisnuit revine singur. */
+function RouteDone({ n, day }: { n: NavState; day?: DaySummary }) {
+  const [busy, setBusy] = useState<'' | 'depou' | 'verific' | 'demo'>('')
+  const [message, setMessage] = useState('')
+  const atDepot = !n.position || n.remaining <= ARRIVED_M * 2
+  const ora = (d: Date) => d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
+  async function run(kind: 'depou' | 'verific' | 'demo', fn: () => Promise<void>) {
+    setBusy(kind)
+    setMessage('')
+    try { await fn() } catch (e) { setMessage(e instanceof Error ? e.message : 'Nu a mers. Încearcă din nou.') } finally { setBusy('') }
+  }
+  const toDepot = () => run('depou', async () => { await n.refresh(); n.start() })
+  const check = () => run('verific', async () => {
+    if (!day) return
+    const noi = await day.onCheck()
+    if (!noi) setMessage('Nicio oprire nouă deocamdată.')
+  })
+  const replay = () => run('demo', async () => { if (day) { await day.onReplay(); await n.refresh('depou') } })
+
+  return (
+    <section className="panel nav-card preview day-done">
+      <span className="sheet-handle" aria-hidden="true" />
+      <div className="nav-destination">
+        <span className="dest-badge ok" aria-hidden="true"><Flag size={20} /></span>
+        <div>
+          <small>Toate opririle sunt făcute</small>
+          <strong>Rută încheiată</strong>
+          <small>{atDepot ? 'Mulțumim! Dacă apar opriri noi, revii singur la rută.' : 'Mai ai drumul până la depou.'}</small>
+        </div>
+      </div>
+      {day && (
+        <div className="day-stats">
+          <div><strong>{day.opriri}</strong><span>opriri</span></div>
+          <div><strong>{formatDistance(day.distanta_m)}</strong><span>traseu</span></div>
+          <div><strong>{Math.round(day.litri).toLocaleString('ro-RO')} L</strong><span>colectați</span></div>
+        </div>
+      )}
+      <div className="nav-actions day-actions">
+        <button className={atDepot ? 'secondary-button' : 'primary-button'} disabled={!!busy} onClick={toDepot}>
+          <Navigation2 size={17} /> {busy === 'depou' ? 'Calculez drumul…' : 'Navighează spre depou'}
+        </button>
+        {day && (
+          <button className="secondary-button" disabled={!!busy} onClick={check}>
+            {busy === 'verific' ? 'Verific…' : 'Verifică ruta nouă'}
+          </button>
+        )}
+      </div>
+      {message && <p className="nav-error" role="status">{message}</p>}
+      {day && (
+        <div className="nav-footer">
+          <span className="day-check">{day.lastCheck ? `Verificată automat la 30 s · ultima: ${ora(day.lastCheck)}` : 'Verificată automat la 30 s'}</span>
+        </div>
+      )}
+      {day && (
+        <div className="nav-footer">
+          <button className="link-button" onClick={day.onShowStops}>Vezi opririle zilei</button>
+          <button className="link-button" disabled={!!busy} onClick={replay}>{busy === 'demo' ? 'Se pregătește…' : 'Reia traseul (demo)'}</button>
+        </div>
+      )}
     </section>
   )
 }

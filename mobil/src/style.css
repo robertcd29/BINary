@@ -786,6 +786,17 @@ body.nav-active { overflow: hidden; }
 .dest-badge.depozitare { color: var(--dump); background: #fbe6ee; }
 .dest-badge.depou { color: var(--ink); background: var(--line-2); }
 .dest-badge.groapa { color: #6b4f2a; background: #f1e8da; }
+.dest-badge.ok { color: #fff; background: var(--ok, #2e8a57); }
+
+/* final de traseu: rezumatul zilei si ce poate face soferul mai departe */
+.day-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 6px 16px 2px; }
+.day-stats div { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; background: #15191a0d; border-radius: 10px; }
+.day-stats strong { font-size: 16px; line-height: 1.2; }
+.day-stats span { color: var(--muted); font-size: 11.5px; }
+.day-actions { flex-direction: column; align-items: stretch; gap: 8px; padding-bottom: 12px !important; }
+.day-actions button { width: 100%; justify-content: center; }
+.day-check { color: var(--muted); font-size: 12px; }
+.day-done .nav-footer { display: flex; justify-content: space-between; gap: 8px; }
 .map-panel .nav-destination small { color: var(--ink-2); }
 .map-panel .nav-actions { padding: 10px 16px 4px; }
 .driver.fullscreen .secondary-button,

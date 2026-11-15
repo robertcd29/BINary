@@ -1177,6 +1177,7 @@
             const nume = p?.nume || e.id;
             switch (e.status) {
                 case "golita": return [`${nume} a fost golită`, false];
+                case "reluat": return [`Camionul ${Number(e.id.split("-")[1]) + 1} își reia traseul de la capăt (demo)`, false];
                 case "descarcat": return [`Camionul ${Number(e.id.split("-")[1]) + 1} a descărcat la groapă și continuă traseul`, false];
                 case "colectata": return [`Depozitarea ${e.id} a fost colectată de camion`, false];
                 case "disparuta": return [`Depozitarea ${e.id} nu mai e acolo (camera nu o mai vede); scoasă din rută`, true];

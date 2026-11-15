@@ -6,7 +6,7 @@ import { MapContainer, Marker, Polyline, Popup, useMap } from 'react-leaflet'
 import BaseMap from '../BaseMap'
 
 import {
-  getDriverRoute, isTransient, markAlertCollected, markStopEmptied, markUnloaded, sendDriverPosition,
+  getDriverRoute, isTransient, markAlertCollected, markStopEmptied, markUnloaded, replayRoute, sendDriverPosition,
   type DriverRoute, type NavStop, type RouteStop
 } from '../api'
 import { fillColor, formatDistance, TIMISOARA, useGeolocation } from '../lib'
@@ -15,6 +15,7 @@ import { NavCard, NavLayer, type NavState, speak, useNavigation } from '../Navig
 export const TRUCK_COLORS = ['#2b59d9', '#7a4bc2', '#0e8c82', '#b5487a', '#5b6b1f', '#c46a1b']   // ca pe dashboard, un camion pe culoare
 const SEND_EVERY_MS = 2000     // pozitia ajunge la dispecer la fiecare 2 secunde
 const ROUTE_CHECK_MS = 10_000  // cat de des verificam daca dispecerul a pus opriri noi pe ruta
+const DONE_CHECK_MS = 30_000   // ruta incheiata: verificam la 30 s daca au aparut opriri noi
 
 /** Incadreaza ruta in harta, lasand loc pentru statisticile de sus si cardul de jos.
  *  Doar cand se schimba opririle (nu la fiecare reincarcare), ca sa nu mute harta mutata de sofer. */
@@ -51,6 +52,7 @@ export function useDriver(truckId: string) {
   const navigation = useNavigation(truckId, geo.position, true, geo.accuracy)
   const [route, setRoute] = useState<DriverRoute | null>(null)
   const [error, setError] = useState('')
+  const [lastCheck, setLastCheck] = useState<Date | null>(null)
 
   // o singura cerere odata: cu serverul in repornire, o cerere poate astepta pana la ~30 s
   const routeBusy = useRef(false)
@@ -58,7 +60,7 @@ export function useDriver(truckId: string) {
     if (routeBusy.current) return Promise.resolve()
     routeBusy.current = true
     return getDriverRoute(truckId)
-    .then(r => { setRoute(r); setError('') })
+    .then(r => { setRoute(r); setError(''); setLastCheck(new Date()) })
     .catch(e => {
       // o cadere scurta a serverului nu sterge ruta de pe ecran: reincercam la urmatoarea verificare
       if (isTransient(e)) return
@@ -75,10 +77,12 @@ export function useDriver(truckId: string) {
   const routeRef = useRef(route)
   routeRef.current = route
   const refreshNav = navigation.refresh
+  // ruta incheiata = are opriri si toate sunt facute; atunci verificam mai rar (la 30 s)
+  const finished = !!route && route.opriri.length > 0 && route.opriri.every(o => o.facuta)
   useEffect(() => {
-    const id = setInterval(loadRoute, ROUTE_CHECK_MS)
+    const id = setInterval(loadRoute, finished ? DONE_CHECK_MS : ROUTE_CHECK_MS)
     return () => clearInterval(id)
-  }, [loadRoute])
+  }, [loadRoute, finished])
   useEffect(() => {
     if (stopsKey === null) return
     const before = lastKey.current
@@ -88,7 +92,9 @@ export function useDriver(truckId: string) {
     const noi = acum.filter(id => !before.split(',').includes(id))
     // scoasa din ruta (nu bifata de sofer): camera a vazut ca depozitarea nu mai e acolo
     const scoase = before.split(',').filter(id => id && !routeRef.current?.opriri.some(o => o.id === id))
-    if (navigation.started && navigation.voice) {
+    if (!navigation.started && navigation.voice && noi.length && !before.split(',').filter(Boolean).length) {
+      speak(noi.length === 1 ? 'Ai o oprire nouă pe rută' : `Ai ${noi.length} opriri noi pe rută`)   // dupa ruta incheiata
+    } else if (navigation.started && navigation.voice) {
       if (noi.some(id => id.startsWith('groapa'))) speak('Camionul se umple: mergi să descarci la groapă, apoi continui traseul')
       else if (noi.length) speak('Rută actualizată: o oprire nouă')
       else if (scoase.length) speak('Rută actualizată: o depozitare nu mai e acolo, a fost scoasă din rută')
@@ -114,12 +120,27 @@ export function useDriver(truckId: string) {
     loadRoute()     // lista opririlor se actualizeaza in fundal; navigatia trece imediat la urmatoarea
   }
 
-  return { geo, navigation, route, error, complete, loadRoute }
+  /** "Verifică ruta nouă": cere ruta acum; intoarce cate opriri nefacute are (0 = nimic nou). */
+  async function checkNow() {
+    routeBusy.current = false        // o verificare ceruta de sofer nu asteapta dupa cea automata
+    const r = await getDriverRoute(truckId)
+    setRoute(r)
+    setLastCheck(new Date())
+    return r.opriri.filter(o => !o.facuta).length
+  }
+
+  async function replay() {
+    await replayRoute(truckId)
+    lastKey.current = null          // opririle "noi" de dupa reluare nu se anunta ca adaugate de dispecer
+    await loadRoute()
+  }
+
+  return { geo, navigation, route, error, complete, loadRoute, replay, checkNow, lastCheck }
 }
 
 export type DriverState = ReturnType<typeof useDriver>
 
-export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
+export function DriverNav({ d, truckId, onShowStops }: { d: DriverState; truckId: string; onShowStops: () => void }) {
   const n: NavState = d.navigation
   const color = TRUCK_COLORS[Number(truckId) % TRUCK_COLORS.length]
   const r = d.route
@@ -173,7 +194,15 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
           </div>
         )}
 
-        <NavCard n={n} onComplete={(s: NavStop) => d.complete(s)} />
+        <NavCard n={n} onComplete={(s: NavStop) => d.complete(s)} day={r ? {
+          opriri: r.opriri.filter(o => o.facuta && o.tip !== 'groapa').length,
+          distanta_m: r.distanta_m,
+          litri: r.incarcare_l,
+          lastCheck: d.lastCheck,
+          onCheck: d.checkNow,
+          onShowStops,
+          onReplay: d.replay,
+        } : undefined} />
       </section>
     </div>
   )

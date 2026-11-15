@@ -138,6 +138,10 @@ export async function sendDriverPosition(truckId: string, position: Coordinates)
 export const markStopEmptied = (stopId: string) =>
   apiRequest(`/api/pubele/${encodeURIComponent(stopId)}/golita`, { method: 'POST' })
 
+/** Demo: soferul isi reia traseul de la capat (doar camionul lui). */
+export const replayRoute = (truckId: string) =>
+  apiRequest(`/api/ruta/${encodeURIComponent(truckId)}/reia`, { method: 'POST' })
+
 export const markUnloaded = (stopId: string) =>
   apiRequest(`/api/opriri/${encodeURIComponent(stopId)}/descarcat`, { method: 'POST' })
 

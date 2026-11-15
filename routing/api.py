@@ -1001,6 +1001,40 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None, d
     return {"camion": camion, "opriri": opriri, "etape": etape}
 
 
+@router.post("/ruta/{camion}/reia")
+def reia_traseu(camion: int, date: dict | None = Depends(cere_rol("sofer", "admin"))):
+    """Pentru demo: soferul isi reia traseul de la capat, fara dispecer si fara sa atinga alte camioane.
+
+    Opririle camionului nu mai sunt bifate, camionul e gol si pleaca din depou; ghenele simulate de pe
+    ruta revin la umplerea de dimineata, iar depozitarile colectate de el redevin "pe ruta".
+    """
+    c = _camionul_meu(date)
+    if c is not None and c != camion:
+        raise HTTPException(403, "Poți relua doar traseul camionului tău")
+    with _connect() as conn, _lock:
+        plan = _state["plan"]
+        ruta = plan and next((r for r in plan["routes"] if r["truck"] == camion), None)
+        if ruta is None:
+            raise HTTPException(404, f"Camionul {camion} nu are ruta azi")
+        ids = [s for s in ruta["stops"] if s != "depot"]
+        ghene = [s for s in ids if s in SIM and s not in SENZORI]   # senzorii reali raman cum sunt
+        with conn.cursor() as cur:
+            cur.executemany("UPDATE rutare_pubele SET umplere = %s, actualizat = now(), golita_la = NULL WHERE id = %s",
+                            [(round(SIM[b]["fill_level"] * 100), b) for b in ghene])
+            if _has_trashes(conn):
+                cur.executemany("UPDATE trashes SET umplere = %s, actualizat = now() WHERE id = %s",
+                                [(round(SIM[b]["fill_level"] * 100), b) for b in ghene])
+        conn.execute("DELETE FROM rutare_golire WHERE bin_id = ANY(%s)", (ghene,))
+        conn.execute("""UPDATE rutare_alerte SET status = 'asignata', camion = %s, inchisa = NULL
+                        WHERE id = ANY(%s) AND status = 'colectata'""", (camion, ids))
+        _state["facute"] -= set(ids)
+        _state["incarcare"][camion] = 0
+        _state["pozitii"].pop(camion, None)
+        engine.reordoneaza(plan, camion, _state["facute"], None, incarcat=0)   # din depou, nu de la GPS
+        _event({"id": f"camion-{camion}", "status": "reluat"})
+    return {"status": "ok"}
+
+
 class Pozitie(BaseModel):
     camion: int
     lat: float

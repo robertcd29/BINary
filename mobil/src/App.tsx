@@ -50,7 +50,7 @@ function Driver({ truckId }: { truckId: string }) {
   return (
     <>
       <NavTopBar n={d.navigation} />
-      {tab === 'navigatie' ? <DriverNav d={d} truckId={truckId} /> : <DriverStops d={d} />}
+      {tab === 'navigatie' ? <DriverNav d={d} truckId={truckId} onShowStops={() => setTab('opriri')} /> : <DriverStops d={d} />}
       {!d.navigation.started && (
         <nav className="tabbar" aria-label="Secțiuni">
           <button aria-current={tab === 'navigatie'} onClick={() => setTab('navigatie')}><Navigation2 size={22} /><span>Navigație</span></button>
