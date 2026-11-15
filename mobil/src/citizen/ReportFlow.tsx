@@ -59,11 +59,11 @@ export default function ReportFlow({ geo, onDone }: { geo: GeoState; onDone: () 
 
   if (result) {
     return (
-      <div className="screen screen-pad">
-        <div className={`result ${result.acceptat ? 'ok' : 'no'}`}>
+      <div className="screen screen-pad citizen">
+        <div className={`result ${result.acceptat ? 'ok' : 'no'}`} role="status">
           <div className="result-icon">{result.acceptat ? <Check size={30} /> : <CircleAlert size={30} />}</div>
           <h1>{result.acceptat ? 'Mulțumim! Raport acceptat.' : 'Nu pare o depozitare de deșeuri'}</h1>
-          <p>{result.acceptat ? result.descriere : result.motiv}</p>
+          <p className={result.acceptat ? 'result-desc' : 'result-reason'}>{result.acceptat ? result.descriere : result.motiv}</p>
           {result.acceptat && (
             <div className="result-next">
               {result.alerta.status === 'pe_ruta'
@@ -85,7 +85,7 @@ export default function ReportFlow({ geo, onDone }: { geo: GeoState; onDone: () 
   }
 
   return (
-    <div className="screen screen-pad">
+    <div className="screen screen-pad citizen report-screen">
       <header className="screen-head">
         <h1>Raportează o depozitare</h1>
         <p>Fă o poză. Restul îl facem noi: verificăm imaginea și trimitem un camion.</p>
@@ -107,9 +107,9 @@ export default function ReportFlow({ geo, onDone }: { geo: GeoState; onDone: () 
         </button>
       )}
 
-      <div className="card location">
+      <div className={`card location ${geo.position ? 'is-ok' : geo.error ? 'is-error' : 'is-pending'}`} role="status">
         <div className="location-row">
-          <MapPin size={18} />
+          <span className="location-icon" aria-hidden="true">{geo.position ? <Check size={18} /> : <MapPin size={18} />}</span>
           <div>
             <strong>{geo.position ? 'Locația ta' : 'Aflăm locația…'}</strong>
             <span>{geo.position
@@ -135,7 +135,7 @@ export default function ReportFlow({ geo, onDone }: { geo: GeoState; onDone: () 
         <span>Fiecare poză e verificată automat. Rapoartele false sunt respinse, iar cele repetate din același loc se grupează.</span>
       </div>
 
-      {error && <p className="form-error">{error}</p>}
+      {error && <p className="form-error" role="alert"><CircleAlert size={18} aria-hidden="true" /><span>{error}</span></p>}
 
       <div className="sticky-action">
         <button className="btn btn-primary btn-block btn-lg" disabled={!photo || !geo.position || busy} onClick={send}>

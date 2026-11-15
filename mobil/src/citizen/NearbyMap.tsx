@@ -58,7 +58,7 @@ export default function NearbyMap({ geo }: { geo: GeoState }) {
   const full = bins.filter(b => (b.umplere ?? 0) >= HAS_ROOM).length
 
   return (
-    <div className="screen screen-map">
+    <div className="screen screen-map citizen">
       <MapContainer center={[TIMISOARA.lat, TIMISOARA.lng]} zoom={13} zoomControl={false} className="full-map">
         <BaseMap />
         <FlyTo point={focus} />

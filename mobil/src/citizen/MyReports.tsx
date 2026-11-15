@@ -1,6 +1,6 @@
 // Rapoartele trimise de pe acest telefon, cu starea lor live: verificat, pe ruta, colectat.
 import { useEffect, useState } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, Check } from 'lucide-react'
 
 import { getAlerts, photoUrl, type Alert } from '../api'
 import { loadReports, timeAgo } from '../lib'
@@ -42,7 +42,7 @@ export default function MyReports({ onNew }: { onNew: () => void }) {
   const collected = reports.filter(r => resolved(alerts[r.id])).length
 
   return (
-    <div className="screen screen-pad">
+    <div className="screen screen-pad citizen">
       <header className="screen-head">
         <h1>Rapoartele mele</h1>
         <p>Urmărește ce se întâmplă cu fiecare raport trimis.</p>
@@ -69,11 +69,14 @@ export default function MyReports({ onNew }: { onNew: () => void }) {
             const a = alerts[r.id]
             const step = stepOf(a)
             return (
-              <li key={r.id} className="card report">
-                <img src={photoUrl(r.id)} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = 'hidden' }} />
+              <li key={r.id} className={`card report ${resolved(a) ? 'is-done' : a?.status === 'asignata' ? 'is-route' : ''}`}>
+                <span className="report-thumb" aria-hidden="true">
+                  <Camera size={22} />
+                  <img src={photoUrl(r.id)} alt="" loading="lazy" onError={e => { e.currentTarget.style.visibility = 'hidden' }} />
+                </span>
                 <div className="report-body">
                   <div className="report-top">
-                    <strong>{label(a)}</strong>
+                    <strong className="report-status">{resolved(a) && <Check size={14} aria-hidden="true" />}{label(a)}</strong>
                     <time>{timeAgo(r.createdAt)}</time>
                   </div>
                   <p>{r.descriere}</p>
