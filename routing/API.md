@@ -36,6 +36,12 @@ Răspuns respins (tot cod 200):
 }
 ```
 
+Limite (răspuns `{ "detail": "mesaj" }`, aplicația afișează mesajul):
+- poza mai mare de **10 MB** → `413`, „Poza e prea mare (maximum 10 MB). Trimite o poză mai mică.”;
+- mai mult de **3 rapoarte pe minut** de la aceeași adresă IP → `429`, „Ai trimis deja 3 rapoarte în ultimul minut. Încearcă din nou peste N secunde.”
+
+Aceleași limite și la `POST /rapoarte` fără `/api` (varianta aplicației).
+
 ---
 
 ## Șofer

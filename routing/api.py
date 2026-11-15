@@ -31,13 +31,14 @@ from typing import Literal
 import io
 import base64
 import hmac
+from collections import deque
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))       # modulele din routing/ se importa intre ele fara pachet
 
 import psycopg
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Request, UploadFile
 from PIL import Image
 from psycopg.rows import dict_row
 from pydantic import BaseModel
@@ -815,9 +816,22 @@ def pubele_fizice():
         return [{k: r[k] for k in ("id", "lat", "lng", "umplere")} for r in _trashes(conn)]
 
 
+_PUBELE = {"la": -1e9, "date": None}
+_PUBELE_LOCK = threading.Lock()
+PUBELE_CACHE_S = 3                  # dashboard-ul si aplicatia cer harta des; raspunsul e refolosit 3 secunde
+
+
 @router.get("/pubele")
 def toate_pubelele():
     """Pubelele reale si cele simulate, cu umplerea curenta, pentru harta din dashboard."""
+    with _PUBELE_LOCK:              # cererile venite deodata asteapta un singur calcul
+        if _PUBELE["date"] is None or time.monotonic() - _PUBELE["la"] > PUBELE_CACHE_S:
+            _PUBELE["date"] = _calculeaza_pubele()
+            _PUBELE["la"] = time.monotonic()
+        return _PUBELE["date"]
+
+
+def _calculeaza_pubele():
     with _connect() as conn:
         bins, _, surse = _current_bins(conn)
         info = {**SIM, **{r["id"]: r for r in _trashes(conn)}}
@@ -849,9 +863,45 @@ CAPTURES.mkdir(exist_ok=True)
 STATUS_APLICATIE = {"assigned": "pe_ruta", "duplicat": "duplicat"}
 
 
+POZA_MAX_MB = 10
+RAPOARTE_PE_MINUT = 3               # de la aceeasi adresa IP (in memorie: se pierde la repornire, e de ajuns)
+_RAPOARTE_IP = {}                   # ip -> momentele ultimelor rapoarte (time.monotonic)
+_RAPOARTE_LOCK = threading.Lock()
+
+
+def _marime_poza(poza):
+    """Marimea fisierului urcat, fara sa-l citim: e deja pe disc (sau in memorie, daca e mic)."""
+    if poza.size is not None:
+        return poza.size
+    poza.file.seek(0, 2)
+    n = poza.file.tell()
+    poza.file.seek(0)
+    return n
+
+
+def _limita_rapoarte(ip):
+    """Cel mult RAPOARTE_PE_MINUT rapoarte pe minut de la acelasi IP; altfel 429."""
+    acum = time.monotonic()
+    with _RAPOARTE_LOCK:
+        for k in [k for k, v in _RAPOARTE_IP.items() if not v or acum - v[-1] > 60]:
+            del _RAPOARTE_IP[k]          # IP-urile care n-au mai trimis nimic de un minut nu mai tin memorie
+        t = _RAPOARTE_IP.setdefault(ip, deque())
+        while t and acum - t[0] > 60:
+            t.popleft()
+        if len(t) >= RAPOARTE_PE_MINUT:
+            asteapta = math.ceil(60 - (acum - t[0]))
+            raise HTTPException(429, f"Ai trimis deja {RAPOARTE_PE_MINUT} rapoarte în ultimul minut. "
+                                     f"Încearcă din nou peste {asteapta} secunde.")
+        t.append(acum)
+
+
 @router.post("/rapoarte")  # deschis si vizitatorilor: poza trece oricum prin filtrul Gemini
-def raport_cetatean(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
+def raport_cetatean(request: Request, poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...)):
     """Gemini verifica poza; daca e gunoi, intra ca orice alerta (duplicate, inserare in ruta)."""
+    if _marime_poza(poza) > POZA_MAX_MB * 1024 * 1024:
+        raise HTTPException(413, f"Poza e prea mare (maximum {POZA_MAX_MB} MB). Trimite o poză mai mică.")
+    # in spatele lui Caddy, uvicorn ia adresa reala din X-Forwarded-For (proxy-ul e pe 127.0.0.1)
+    _limita_rapoarte(request.client.host if request.client else "necunoscut")
     try:
         # intoarsa dupa EXIF inainte de orice conversie (altfel orientarea de pe telefon se pierde)
         imagine = pregateste(Image.open(io.BytesIO(poza.file.read())))
@@ -1077,10 +1127,10 @@ def compat_trashes():
 
 
 @compat.post("/rapoarte")  # deschis si vizitatorilor: poza trece oricum prin filtrul Gemini
-def compat_rapoarte(poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...),
+def compat_rapoarte(request: Request, poza: UploadFile = File(...), lat: float = Form(...), lng: float = Form(...),
                     descriere: str = Form("")):
     """Aplicatia asteapta {id, status}; filtrul Gemini si alertele sunt cele din /api/rapoarte."""
-    r = raport_cetatean(poza, lat, lng)
+    r = raport_cetatean(request, poza, lat, lng)
     if not r["acceptat"]:
         return {"id": "-", "status": "Respinsă", "motiv": r["motiv"]}
     return {"id": r["alerta"]["id"], "status": "Acceptată", "descriere": r["descriere"]}
