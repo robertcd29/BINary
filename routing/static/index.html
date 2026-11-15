@@ -1024,7 +1024,10 @@
             const facute = new Set(plan.facute || []);
             plan.routes.forEach(r => {
                 const opriri = r.stops.filter(deColectat);
-                const descarcari = r.stops.filter(eGroapa);
+                // descarcarea de la final (ultima groapa inainte de depou) e normala; numaram doar pe cele de pe drum
+                const fara = r.stops.filter(s => s !== "depot");
+                const finala = eGroapa(fara[fara.length - 1]) ? fara[fara.length - 1] : null;
+                const descarcari = r.stops.filter(s => eGroapa(s) && s !== finala);
                 const urmatoarea = r.stops.find(s => s !== "depot" && !facute.has(s));
                 const capacitate = plan.capacitate_l || CAPACITATE_L;
                 const inCamion = Math.round((r.incarcare_acum_l ?? 0) / capacitate * 100);
@@ -1044,8 +1047,11 @@
                 const f = (v, t) => { const s = el("span"); s.append(el("b", "", v), ` ${t}`); return s; };
                 // incarcarea de ACUM (de la ultima descarcare), nu tot ce strange azi
                 meta.append(f(`${gata}/${opriri.length}`, "opriri"), f(fmt(r.distance_m / 1000, 1), "km"),
-                    f(`${fmt(Math.min(100, inCamion))}%`, "încărcat"),
-                    f(`${descarcari.filter(s => facute.has(s)).length}/${descarcari.length}`, "descărcări"));
+                    f(`${fmt(Math.min(100, inCamion))}%`, "încărcat"));
+                if (descarcari.length) {
+                    const n = descarcari.length;
+                    meta.append(f(`${n}`, `${n === 1 ? "descărcare" : "descărcări"} pe drum (făcute ${descarcari.filter(s => facute.has(s)).length})`));
+                }
                 b.append(meta);
                 const pr = el("span", "progress");
                 const bar = el("span");
