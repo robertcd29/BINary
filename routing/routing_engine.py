@@ -133,6 +133,16 @@ def _snap(lat, lng):
     return stop, off
 
 
+def _snap_incinta(lat, lng):
+    """Ca _snap, pentru groapa si depou: camionul se intoarce in incinta, deci intra si pleaca in orice directie.
+    Oprirea tine in "incinta" toate strazile (cu sens) de langa punct; etapa care pleaca de aici sau ajunge
+    aici o alege pe cea mai ieftina, fara cost de intoarcere (si fara cost pentru partea strazii: nu se
+    traverseaza cu nicio ghena)."""
+    stop, off = _snap(lat, lng)
+    stop["incinta"] = [{**s, "dreapta": None} for _, s in _snap_all(lat, lng)]
+    return stop, off
+
+
 def _bearing(a, b):
     """Directia de mers de la a la b, in grade (0 = nord, 90 = est)."""
     la1, la2 = np.radians(a[0]), np.radians(b[0])
@@ -242,7 +252,20 @@ def _same_edge_ahead(a, b):
     return a["e"] is not None and a["e"] == b["e"] and b["off"] >= a["off"]
 
 
+def _capete_etapa(a, b):
+    """Capetele efective ale etapei a -> b: la groapa/depou, strada si sensul cele mai ieftine (camionul
+    se intoarce in incinta, deci intoarcerea de acolo nu costa)."""
+    if a is b or not (a.get("incinta") or b.get("incinta")):
+        return a, b
+    return min(((x, y) for x in a.get("incinta") or [a] for y in b.get("incinta") or [b]),
+               key=lambda p: _leg1(*p))
+
+
 def _leg(a, b):
+    return _leg1(*_capete_etapa(a, b))
+
+
+def _leg1(a, b):
     """Costul drumului legal de la oprirea a la oprirea b (metri + costul virajelor), pentru ALES drumul:
     restul strazii lui a, strazile dintre ele, inceputul strazii lui b. Ghena lasata pe partea stanga
     a strazii costa in plus."""
@@ -261,6 +284,7 @@ def _leg_m(a, b):
     """Metrii reali pe drumul ales de _leg (fara costurile de viraj), pentru kilometrii raportati."""
     if a is b:
         return 0.0
+    a, b = _capete_etapa(a, b)
     if _same_edge_ahead(a, b):
         return max(0.0, b["off"] - a["off"])
     x = _intrare(a, b)
@@ -307,6 +331,7 @@ def _sub(stop, d0, d1):
 
 def _leg_parts(a, b):
     """Drumul de la a la b ca bucati [(puncte, nume strada, (u, v))], fiecare strada cu forma ei reala."""
+    a, b = _capete_etapa(a, b)
     if a is b or _same_edge_ahead(a, b):
         return [(_sub(a, a["off"], b["off"]), _EDGES[a["e"]][4], (a["u"], a["v"]))]
     x = _intrare(a, b)
@@ -688,7 +713,7 @@ def _empty_plan(depot, warnings):
     return {"total_distance_m": 0, "routes": routes, "skipped": [], "predictions": {},
             "metrics": {"total_km": 0, "trucks_used": 0, "bins_total": 0, "bins_collected": 0,
                         "bins_skipped": 0, "overflows_prevented": 0},
-            "alerts": [], "warnings": warnings, "_stops": {"depot": depot, "groapa": _snap(GROAPA["lat"], GROAPA["lng"])[0]},
+            "alerts": [], "warnings": warnings, "_stops": {"depot": depot, "groapa": _snap_incinta(GROAPA["lat"], GROAPA["lng"])[0]},
             "_vol": {}}
 
 
@@ -750,7 +775,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
     Un pubela poate avea "compactare": False (depozitarile ilegale): volumul ei nu se compacteaza."""
     history = history or {}
     warnings = []
-    depot, _ = _snap(DEPOT["lat"], DEPOT["lng"])
+    depot, _ = _snap_incinta(DEPOT["lat"], DEPOT["lng"])
     used = _clean_bins(bins, warnings)
     if not used:
         warnings.append("Nicio pubela utilizabila: toate camioanele raman in depozit")
@@ -828,7 +853,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         routes, _, visited = _solve(M, demands, groups, CAPACITATE_UTILA_L * MAX_CURSE, seconds, zone=zone_idx)
 
     # locul ales pentru fiecare pubela vizitata (sensul strazii); cele sarite raman pe varianta preferata
-    groapa, _ = _snap(GROAPA["lat"], GROAPA["lng"])
+    groapa, _ = _snap_incinta(GROAPA["lat"], GROAPA["lng"])
     st = {"depot": depot, "groapa": groapa, **{b["id"]: b["_stop"] for b in used}}
     for n in visited:
         if n:
