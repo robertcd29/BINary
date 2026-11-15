@@ -6,7 +6,7 @@ import { MapContainer, Marker, Polyline, Popup, useMap } from 'react-leaflet'
 import BaseMap from '../BaseMap'
 
 import {
-  getDriverRoute, isTransient, markAlertCollected, markStopEmptied, sendDriverPosition,
+  getDriverRoute, isTransient, markAlertCollected, markStopEmptied, markUnloaded, sendDriverPosition,
   type DriverRoute, type NavStop, type RouteStop
 } from '../api'
 import { fillColor, formatDistance, TIMISOARA, useGeolocation } from '../lib'
@@ -89,22 +89,27 @@ export function useDriver(truckId: string) {
     // scoasa din ruta (nu bifata de sofer): camera a vazut ca depozitarea nu mai e acolo
     const scoase = before.split(',').filter(id => id && !routeRef.current?.opriri.some(o => o.id === id))
     if (navigation.started && navigation.voice) {
-      if (noi.length) speak('Rută actualizată: o oprire nouă')
+      if (noi.some(id => id.startsWith('groapa'))) speak('Camionul se umple: mergi să descarci la groapă, apoi continui traseul')
+      else if (noi.length) speak('Rută actualizată: o oprire nouă')
       else if (scoase.length) speak('Rută actualizată: o depozitare nu mai e acolo, a fost scoasă din rută')
     }
     refreshNav()
   }, [stopsKey, refreshNav, navigation.started, navigation.voice])
 
-  // pozitia ajunge la dispecer, cel mult o data la 2 secunde
+  // pozitia ajunge la dispecer, cel mult o data la 2 secunde. In simulare pozitia o trimite
+  // simularea: daca o trimiteam si pe cea GPS reala (unde e telefonul de fapt), camionul sarea pe
+  // dashboard intre traseu si locul telefonului, la fiecare 2 secunde
   const lastSent = useRef(0)
+  const simulating = navigation.simulating
   useEffect(() => {
-    if (!geo.position || Date.now() - lastSent.current < SEND_EVERY_MS) return
+    if (simulating || !geo.position || Date.now() - lastSent.current < SEND_EVERY_MS) return
     lastSent.current = Date.now()
     sendDriverPosition(truckId, geo.position).catch(() => { /* reincercam la urmatoarea pozitie */ })
-  }, [geo.position, truckId])
+  }, [geo.position, truckId, simulating])
 
   async function complete(stop: { id: string; tip: string }) {
     if (stop.tip === 'depozitare') await markAlertCollected(stop.id)
+    else if (stop.tip === 'groapa') await markUnloaded(stop.id)
     else await markStopEmptied(stop.id)
     loadRoute()     // lista opririlor se actualizeaza in fundal; navigatia trece imediat la urmatoarea
   }
@@ -147,11 +152,11 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
               </>
             )}
             {r?.opriri.map((s, i) => {
-              const kind = s.facuta ? 'done' : s.id === nextId ? 'next' : s.tip === 'depozitare' ? 'dump' : 'todo'
+              const kind = s.facuta ? 'done' : s.id === nextId ? 'next' : s.tip !== 'pubela' ? 'dump' : 'todo'
               return (
                 <Marker key={s.id} position={[s.lat, s.lng]} zIndexOffset={kind === 'next' ? 1000 : kind === 'done' ? -100 : 0}
-                  icon={stopIcon(s.facuta ? CHECK_SVG : String(i + 1), kind, color)}>
-                  <Popup><strong>{i + 1}. {s.nume}</strong><br />{s.tip === 'depozitare' ? 'Depozitare ilegală' : s.adresa ?? ''}</Popup>
+                  icon={stopIcon(s.facuta ? CHECK_SVG : s.tip === 'groapa' ? 'G' : String(i + 1), kind, color)}>
+                  <Popup><strong>{i + 1}. {s.nume}</strong><br />{s.tip === 'depozitare' ? 'Depozitare ilegală' : s.tip === 'groapa' ? 'Descărcare, apoi continui traseul' : s.adresa ?? ''}</Popup>
                 </Marker>
               )
             })}
@@ -164,6 +169,7 @@ export function DriverNav({ d, truckId }: { d: DriverState; truckId: string }) {
             <div><strong>{ramase.length}<small> / {r.opriri.length}</small></strong><span>opriri rămase</span></div>
             <div><strong>{formatDistance(r.distanta_m)}</strong><span>traseu total</span></div>
             <div><strong>{Math.round(r.incarcare_l).toLocaleString('ro-RO')} L</strong><span>de colectat</span></div>
+            {r.capacitate_l ? <div><strong>{Math.min(100, Math.round((r.in_camion_l ?? 0) / r.capacitate_l * 100))}%</strong><span>încărcat acum</span></div> : null}
           </div>
         )}
 
@@ -202,7 +208,7 @@ export function DriverStops({ d }: { d: DriverState }) {
             <span className="stop-n">{s.facuta ? <Check size={16} /> : i + 1}</span>
             <div className="stop-body">
               <strong>{s.nume}</strong>
-              <span>{s.tip === 'depozitare' ? 'Depozitare ilegală' : s.adresa ?? s.id}</span>
+              <span>{s.tip === 'depozitare' ? 'Depozitare ilegală' : s.tip === 'groapa' ? 'Descarci camionul, apoi continui traseul' : s.adresa ?? s.id}</span>
               {s.tip === 'pubela' && s.umplere != null && (
                 <div className="stop-fill">
                   <div className="fill-meter small"><span style={{ width: `${s.umplere}%`, background: fillColor(s.umplere) }} /></div>
@@ -213,7 +219,7 @@ export function DriverStops({ d }: { d: DriverState }) {
             {s.facuta
               ? <span className="pill ok">Gata</span>
               : <button className="btn btn-small" disabled={busy === s.id} onClick={() => finish(s)}>
-                  {s.tip === 'depozitare' ? 'Colectată' : 'Golită'}
+                  {s.tip === 'depozitare' ? 'Colectată' : s.tip === 'groapa' ? 'Descărcat' : 'Golită'}
                 </button>}
           </li>
         ))}

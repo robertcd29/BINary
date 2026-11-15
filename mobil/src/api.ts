@@ -105,7 +105,7 @@ export async function submitReport(photo: File, location: Coordinates): Promise<
 
 export type RouteStop = {
   id: string
-  tip: 'pubela' | 'depozitare'
+  tip: 'pubela' | 'depozitare' | 'groapa'   // groapa = camionul descarca, apoi continua traseul
   nume: string
   adresa: string | null
   lat: number
@@ -120,6 +120,8 @@ export type DriverRoute = {
   incarcare_l: number
   opriri: RouteStop[]
   traseu: [number, number][]
+  in_camion_l?: number    // cati litri are camionul acum (de la ultima descarcare)
+  capacitate_l?: number
 }
 
 export const getDriverRoute = (truckId: string) =>
@@ -135,6 +137,9 @@ export async function sendDriverPosition(truckId: string, position: Coordinates)
 
 export const markStopEmptied = (stopId: string) =>
   apiRequest(`/api/pubele/${encodeURIComponent(stopId)}/golita`, { method: 'POST' })
+
+export const markUnloaded = (stopId: string) =>
+  apiRequest(`/api/opriri/${encodeURIComponent(stopId)}/descarcat`, { method: 'POST' })
 
 export const markAlertCollected = (alertId: string) =>
   apiRequest(`/api/alerte/${encodeURIComponent(alertId)}/colectata`, { method: 'POST' })
@@ -168,7 +173,7 @@ export type NavLeg = {
 
 export type NavStop = {
   id: string
-  tip: 'pubela' | 'depozitare' | 'depou'
+  tip: 'pubela' | 'depozitare' | 'groapa' | 'depou'
   nume: string
   adresa: string | null
   lat: number

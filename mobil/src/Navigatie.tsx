@@ -5,7 +5,7 @@ import L from 'leaflet'
 import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import {
   ArrowUp, ArrowUpLeft, ArrowUpRight, Compass, CornerUpLeft, CornerUpRight, Flag, LocateFixed,
-  Navigation2, Play, Square, Trash2, TriangleAlert, Undo2, Volume2, VolumeX
+  Navigation2, Play, Square, Trash2, TriangleAlert, Truck, Undo2, Volume2, VolumeX
 } from 'lucide-react'
 
 type RotatableMap = L.Map & { setBearing?: (deg: number) => void }
@@ -473,12 +473,12 @@ export function NavCard({ n, onComplete }: {
       <div className="nav-destination">
         {!n.started && (
           <span className={`dest-badge ${n.stop.tip}`} aria-hidden="true">
-            {n.stop.tip === 'depou' ? <Flag size={20} /> : n.stop.tip === 'depozitare' ? <TriangleAlert size={20} /> : <Trash2 size={20} />}
+            {n.stop.tip === 'depou' ? <Flag size={20} /> : n.stop.tip === 'depozitare' ? <TriangleAlert size={20} /> : n.stop.tip === 'groapa' ? <Truck size={20} /> : <Trash2 size={20} />}
           </span>
         )}
         <div>
           <small>{n.stop.tip === 'depou' ? 'Ultima etapă' : `${n.started ? 'Următoarea oprire' : 'Prima oprire'} · ${ramase} rămase`}</small>
-          <strong>{n.stop.tip === 'depou' ? 'Întoarcere la depou' : n.stop.nume}</strong>
+          <strong>{n.stop.tip === 'depou' ? 'Întoarcere la depou' : n.stop.tip === 'groapa' ? 'Camion plin: descarcă la groapă' : n.stop.nume}</strong>
           {n.stop.adresa && <small>{n.stop.adresa}</small>}
         </div>
         <div className="nav-eta">
@@ -492,7 +492,7 @@ export function NavCard({ n, onComplete }: {
           <button className="primary-button" onClick={() => n.start()}><Navigation2 size={17} /> Pornește navigația</button>
         ) : n.stop.tip !== 'depou' ? (
           <button className="primary-button" disabled={busy} onClick={done}>
-            {busy ? 'Se salvează…' : `${n.stop.tip === 'depozitare' ? 'Am colectat' : 'Am golit ghena'} · următoarea`}
+            {busy ? 'Se salvează…' : `${n.stop.tip === 'depozitare' ? 'Am colectat' : n.stop.tip === 'groapa' ? 'Am descărcat' : 'Am golit ghena'} · următoarea`}
           </button>
         ) : (
           <button className="secondary-button" onClick={n.stop_}><Square size={15} /> Oprește navigația</button>

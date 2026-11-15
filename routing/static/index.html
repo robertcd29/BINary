@@ -332,6 +332,8 @@
 
         .depozitare.colectata { background: var(--faint); box-shadow: 0 0 0 1px var(--faint); }
 
+        .groapa { background: #6b4f2a !important; }
+
         .depou {
             display: grid;
             place-items: center;
@@ -622,9 +624,6 @@
             <div class="live" id="live" aria-live="polite"><span class="live-dot"></span><span id="status">Se conectează…</span></div>
             <button class="btn" id="cont" hidden title="Ieși din cont"></button>
             <button class="btn" id="reset" title="Aduce orașul la starea de dimineață, pentru următorul vizitator">Reset demo</button>
-            <button class="btn btn-primary" id="planifica">
-                <svg class="icon"><use href="#i-play"/></svg>Planifică rutele de azi
-            </button>
         </header>
 
         <section class="kpis" aria-label="Indicatorii zilei">
@@ -694,6 +693,8 @@
         const ASCUNDE_COLECTATE_MS = 7 * 60_000;   // raportarile colectate dispar din tab dupa 7 minute
         const CULORI = ["#2b59d9", "#7a4bc2", "#0e8c82", "#b5487a", "#5b6b1f", "#c46a1b"];
         const CAPACITATE_L = 8000;              // un camion, ca in motorul de rutare
+        const eGroapa = s => typeof s === "string" && s.startsWith("groapa");   // descarcare la groapa de gunoi
+        const deColectat = s => s !== "depot" && !eGroapa(s);
         const L_PE_KM = 0.7;                    // camion de gunoi diesel: ~0,7 L motorina/km
         const KG_CO2_PE_L = 2.68;               // arderea unui litru de motorina
         const STARE_ALERTA = { deschisa: "Nouă", asignata: "Pe rută", colectata: "Colectată", disparuta: "Dispărută (camera nu o mai vede)", duplicat: "Duplicat" };
@@ -873,7 +874,7 @@
         function opririle(plan) {
             const m = {};
             (plan?.routes || []).forEach(r => {
-                r.stops.filter(s => s !== "depot").forEach((s, i, arr) => { m[s] = { truck: r.truck, i: i + 1, n: arr.length }; });
+                r.stops.filter(deColectat).forEach((s, i, arr) => { m[s] = { truck: r.truck, i: i + 1, n: arr.length }; });
             });
             return m;
         }
@@ -939,6 +940,11 @@
                 L.marker(depou, { icon: L.divIcon({ className: "", html: '<div class="depou">D</div>', iconSize: [24, 24] }) })
                     .bindTooltip("Depou", { className: "tip" }).addTo(stratRute);
             }
+            // groapa de gunoi: camioanele merg acolo cand se umplu si la sfarsitul zilei
+            if (plan.groapa && plan.routes.some(r => r.stops.some(eGroapa))) {
+                L.marker([plan.groapa.lat, plan.groapa.lng], { icon: L.divIcon({ className: "", html: '<div class="depou groapa">G</div>', iconSize: [24, 24] }) })
+                    .bindTooltip(`${plan.groapa.nume} · camioanele descarcă aici când se umplu`, { className: "tip" }).addTo(stratRute);
+            }
         }
 
         function evidentiaza(truck) {
@@ -986,7 +992,7 @@
         function deseneazaKpi() {
             const { pubele, plan, alerte, pozitii } = stare;
             const op = opririle(plan);
-            const deGolit = plan ? pubele.filter(p => op[p.id]) : pubele.filter(p => (p.umplere ?? 0) >= 85);
+            const deGolit = plan ? pubele.filter(p => op[p.id]) : pubele.filter(p => (p.umplere ?? 0) >= 55);
             const pline = pubele.filter(p => (p.umplere ?? 0) >= 85).length;
             setKpi("k-golit", fmt(deGolit.length), `din ${pubele.length} ghene · ${pline} peste 85%`);
             document.getElementById("k-golit").classList.toggle("alerta", pline > 0);
@@ -1017,7 +1023,11 @@
             if (!plan) { lista.append(el("li", "gol", "Rutele de azi nu sunt încă planificate.")); return; }
             const facute = new Set(plan.facute || []);
             plan.routes.forEach(r => {
-                const opriri = r.stops.filter(s => s !== "depot");
+                const opriri = r.stops.filter(deColectat);
+                const descarcari = r.stops.filter(eGroapa);
+                const urmatoarea = r.stops.find(s => s !== "depot" && !facute.has(s));
+                const capacitate = plan.capacitate_l || CAPACITATE_L;
+                const inCamion = Math.round((r.incarcare_acum_l ?? 0) / capacitate * 100);
                 const gata = opriri.filter(s => facute.has(s)).length;
                 const poz = stare.pozitii.find(p => p.camion === r.truck);
                 const live = poz && Date.now() - new Date(poz.la) < 120_000;
@@ -1029,11 +1039,13 @@
                 b.append(el("span", "truck-bar"));
                 b.append(el("span", "truck-name", `${numeCamion(r.truck)}${TIPURI[r.truck] === "reciclabil" ? " · Reciclabile" : " · Menajer"}`));
                 b.append(el("span", `truck-state${live ? " live" : ""}`,
-                    !opriri.length ? "În depou" : live ? `GPS ${timpTrecut(poz.la)}` : "Fără GPS"));
+                    !opriri.length ? "În depou" : eGroapa(urmatoarea) ? "Merge la groapă" : live ? `GPS ${timpTrecut(poz.la)}` : "Fără GPS"));
                 const meta = el("span", "truck-meta");
                 const f = (v, t) => { const s = el("span"); s.append(el("b", "", v), ` ${t}`); return s; };
+                // incarcarea de ACUM (de la ultima descarcare), nu tot ce strange azi
                 meta.append(f(`${gata}/${opriri.length}`, "opriri"), f(fmt(r.distance_m / 1000, 1), "km"),
-                    f(`${fmt(Math.round(r.load_l / CAPACITATE_L * 100))}%`, "încărcare"));
+                    f(`${fmt(Math.min(100, inCamion))}%`, "încărcat"),
+                    f(`${descarcari.filter(s => facute.has(s)).length}/${descarcari.length}`, "descărcări"));
                 b.append(meta);
                 const pr = el("span", "progress");
                 const bar = el("span");
@@ -1056,7 +1068,7 @@
             const op = opririle(stare.plan);
             const pred = stare.plan?.predictions || {};
             let pubele = [...stare.pubele].sort((a, b) => (b.umplere ?? 0) - (a.umplere ?? 0));
-            const deGolit = p => stare.plan ? !!op[p.id] : (p.umplere ?? 0) >= 85;
+            const deGolit = p => stare.plan ? !!op[p.id] : (p.umplere ?? 0) >= 55;
             if (filtruGhene === "degolit") pubele = pubele.filter(deGolit);
             if (filtruGhene === "pline") pubele = pubele.filter(p => (p.umplere ?? 0) >= 85);
             $("#c-ghene").textContent = stare.pubele.filter(deGolit).length;
@@ -1086,7 +1098,7 @@
                     const t = el("span", "tag route", `${numeCamion(o.truck)} · oprirea ${o.i}/${o.n}`);
                     t.style.setProperty("--c", CULORI[o.truck % CULORI.length]);
                     tags.append(t);
-                } else if (u >= 85 && p.pe_ruta_posibil !== false) {
+                } else if (u >= 55 && p.pe_ruta_posibil !== false) {
                     tags.append(el("span", "tag warn", "Neplanificată încă"));   // plina, dar nu e pe nicio ruta
                 } else if (u > 0 && stare.plan && p.pe_ruta_posibil !== false) {
                     tags.append(el("span", "tag muted", u >= 30 ? "Amânată: ocol prea mare" : "Amânată: aproape goală"));
@@ -1165,9 +1177,10 @@
             const nume = p?.nume || e.id;
             switch (e.status) {
                 case "golita": return [`${nume} a fost golită`, false];
+                case "descarcat": return [`Camionul ${Number(e.id.split("-")[1]) + 1} a descărcat la groapă și continuă traseul`, false];
                 case "colectata": return [`Depozitarea ${e.id} a fost colectată de camion`, false];
                 case "disparuta": return [`Depozitarea ${e.id} nu mai e acolo (camera nu o mai vede); scoasă din rută`, true];
-                case "citire": return [`${nume}: umplere ${e.inainte}% → ${e.umplere}%`, e.umplere >= 85];
+                case "citire": return [`${nume}: umplere ${e.inainte}% → ${e.umplere}%`, e.umplere >= 55];
                 case "assigned": return [`${nume} a fost adăugată pe ruta camionului ${e.truck + 1}` + (e.extra_m ? ` (+${fmt(e.extra_m / 1000, 1)} km)` : ""), true];
                 case "pending": return [`${nume} are deșeuri, dar niciun camion nu mai are loc azi`, true];
                 case "rejected": return [`${nume} nu poate fi pusă pe o rută (${e.reason})`, true];
@@ -1265,21 +1278,6 @@
             seteazaStatus(`Live · actualizat la ${ora()}`);
         }
 
-        const buton = $("#planifica");
-        buton.onclick = async () => {
-            buton.disabled = true;
-            stareHarta("Se calculează rutele optime…");
-            try {
-                await actualizeaza(await cere("POST", "/api/rute/planifica"));
-                stareHarta("");
-                seteazaStatus(`Rute replanificate la ${ora()}`);
-            } catch (e) {
-                stareHarta(`Rutele nu s-au putut calcula (${e.message}).`);
-            } finally {
-                buton.disabled = false;
-            }
-        };
-
         // reset pentru demo: primul click cere confirmare, al doilea (in 4 secunde) reseteaza
         const reset = $("#reset");
         let resetArmat = null;
@@ -1291,7 +1289,7 @@
             }
             clearTimeout(resetArmat);
             resetArmat = null;
-            reset.disabled = buton.disabled = true;
+            reset.disabled = true;
             reset.textContent = "Se resetează…";
             stareHarta("Orașul revine la starea de dimineață și se recalculează rutele…");
             try {
@@ -1301,7 +1299,7 @@
             } catch (e) {
                 stareHarta(`Resetul nu a reușit (${e.message}).`);
             } finally {
-                reset.disabled = buton.disabled = false;
+                reset.disabled = false;
                 reset.textContent = "Reset demo";
             }
         };

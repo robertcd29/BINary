@@ -31,14 +31,26 @@ check("coordonate lipsa: raportate, restul merge", any("X" in w for w in p["warn
 p = re_.plan_routes([{**bins[0], "umplere": 140}])
 check("umplere peste 100: limitata", any("limitata" in w for w in p["warnings"]))
 
-# 60 pubele pline, de doua ori mai mari decat in realitate: ~73.500 L, peste cei 48.000 L ai flotei
-full = [{**b, "umplere": 100, "capacitate_l": b["capacitate_l"] * 2} for b in bins]
+# 60 pubele pline, de 4 ori mai mari decat in realitate: ~147.000 L, peste ce strang cele 6 camioane
+# intr-o zi chiar cu descarcari la groapa (6 x 7.200 L x MAX_CURSE = 129.600 L)
+full = [{**b, "umplere": 100, "capacitate_l": b["capacitate_l"] * 4} for b in bins]
 p = re_.plan_routes(full)
 check("prea mult gunoi obligatoriu: plan partial, nu eroare",
       "routes" in p and p["metrics"]["mandatory_unserved"] > 0)
 
 r = re_.add_alert(p, {"id": "AL-FULL", "lat": 45.7475, "lng": 21.2395, "volum_l": 5000})
 check("alerta fara loc in camioane: pending, nu eroare", r["status"] == "pending")
+check("camion care se umple: merge la groapa si continua",
+      all(x["descarcari"] >= 2 for x in p["routes"] if len(x["stops"]) > 2))
+
+p = re_.plan_routes(bins, history)
+r0 = next(r for r in p["routes"] if len(r["stops"]) > 3)
+prima = r0["stops"][1]
+re_.reordoneaza(p, r0["truck"], {prima}, incarcat=re_.TRUCK_CAPACITY_L)
+check("camion plin (100%): urmatoarea oprire e groapa", re_.e_groapa(p["routes"][r0["truck"]]["stops"][2]))
+check("dupa ultima ghena camionul descarca inainte de depou",
+      all(re_.e_groapa(r["stops"][-2]) for r in p["routes"] if len(r["stops"]) > 2))
+
 
 p = re_.plan_routes(bins, history)
 r = re_.add_alert(p, {"id": "CIT-1", "lat": 45.7475, "lng": 21.2395, "marime": "mare"})

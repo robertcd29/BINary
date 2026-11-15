@@ -11,8 +11,12 @@ Cum circula datele (cum a stabilit echipa):
 
 Fluxul zilei:
 - dimineata: GET /api/rute (sau POST /api/rute/planifica) face planul;
-- in timpul zilei camioanele sunt pe drum, deci NU refacem planul: o pubela sarita care
-  devine urgenta si fiecare depozitare ilegala sunt inserate cu cost minim in ruta existenta.
+- in timpul zilei camioanele sunt pe drum, deci NU refacem planul: o ghena care trece de 55%
+  si fiecare depozitare ilegala sunt inserate in ruta camionului ei, iar opririle ramase se
+  reordoneaza pornind de unde e camionul acum;
+- cand camionul s-ar umple, ruta il trimite la groapa de gunoi si apoi continua; la final descarca
+  inainte de depou. Ce e in camion se tine minte din opririle bifate (golite / descarcat);
+- la miezul noptii (ora Romaniei) planul se reface singur pentru ziua noua.
 """
 import os
 import sys
@@ -21,6 +25,7 @@ import math
 import threading
 import time
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Literal
 import io
@@ -54,6 +59,7 @@ HISTORY_SLOT = "1 minute"       # citirile se mediaza pe intervale, pentru regre
 MIN_HISTORY_H = 1.0             # istoricul real conteaza doar daca acopera cel putin o ora
 MAX_EVENTS = 50
 RAPORTARE_PCT = 5               # o schimbare de umplere de cel putin 5 puncte apare in fluxul live
+FUS_ORAR = ZoneInfo("Europe/Bucharest")   # "ziua" planului e ziua din Timisoara
 FOLOSESTE_SIMULATE = True       # True = pe langa ghenele din trashes, si cele 60 de ghene simulate din sim_bins.json
 
 # ---------- zone si pubele cu formula (doar pentru prototip) ----------
@@ -127,7 +133,9 @@ _lock = threading.Lock()        # planul e unul singur si e modificat din mai mu
 _state = {"plan": None, "bins": None, "surse": {}, "urgent": {}, "seen": None, "evenimente": [],
           "raportat": None,     # ultima umplere aratata in fluxul live, pe ghena
           "facute": set(),      # opririle bifate azi de soferi (pubele golite, depozitari colectate)
-          "pozitii": {}}        # ultima pozitie GPS a fiecarui camion; doar in memorie, nu in DB
+          "pozitii": {},        # ultima pozitie GPS a fiecarui camion; doar in memorie, nu in DB
+          "incarcare": {},      # cati litri are acum fiecare camion (de la ultima descarcare)
+          "zi": None}           # ziua pentru care e facut planul
 
 with open(HERE / "history.json") as f:
     _SIM_HISTORY = json.load(f)       # istoric simulat pentru pubelele simulate
@@ -263,6 +271,10 @@ def _became_urgent(bin_row, level):
     r = engine.add_alert(plan, {"id": bid, "lat": bin_row["lat"], "lng": bin_row["lng"],
                                 "volum_l": round(engine.DEFAULT_BIN_CAPACITY_L * level / 100),
                                 "camioane": CAMIOANE_PUBELA.get(bid)}, kind="bin")
+    if r["status"] == "assigned":
+        # inserarea poate cadea si printre opririle deja facute: refacem ordinea celor ramase
+        # (si descarcarile) pornind de unde e camionul acum, ca ghena sa fie luata din drum
+        _reordoneaza_camion(r["truck"])
     return _event(r)
 
 
@@ -293,7 +305,7 @@ def _poll(conn):
                             ON CONFLICT (bin_id) DO UPDATE SET golita_la = EXCLUDED.golita_la""",
                          (bid, emptied))
             _state["urgent"][bid] = False
-            _state["facute"].add(bid)
+            _bifeaza(bid)
             events.append(_event({"id": bid, "status": "golita"}))
         conn.execute("INSERT INTO rutare_citiri (bin_id, umplere, ts) VALUES (%s, %s, %s)", (bid, value, ts))
         if value is None:
@@ -324,10 +336,19 @@ def _nimic_nou(conn):
                for r in _trashes(conn))
 
 
+def _azi():
+    return datetime.now(FUS_ORAR).date()
+
+
 def poll_once():
     # lacatul tine pe loc toate cererile care modifica sau citesc planul: il luam doar cand chiar
     # e ceva nou de procesat, si cu conexiunea la baza de date deja deschisa
     with _connect() as conn:
+        if _state["plan"] is not None and _state["zi"] != _azi():
+            with _lock:             # zi noua: planul de ieri nu mai e bun, il refacem
+                if _state["zi"] != _azi():
+                    _build_plan(conn)
+                    print("rutare: zi noua, planul e refacut")
         if _nimic_nou(conn):
             return []
         with _lock:
@@ -429,7 +450,7 @@ def _build_plan(conn):
             plan["warnings"].append(f"{bid}: {s['motiv']}")
     for r in plan["routes"]:
         r["tip"] = TIP_CAMION.get(r["truck"], "menajer")   # dashboard-ul deseneaza punctat rutele de reciclabile
-    _state.update(plan=plan, bins=bins, surse=surse, facute=set())
+    _state.update(plan=plan, bins=bins, surse=surse, facute=set(), incarcare={}, zi=_azi())
     pe_ruta = {s: r["truck"] for r in plan["routes"] for s in r["stops"]}
     for a in alerte:
         plan["predictions"].pop(a["id"], None)
@@ -499,8 +520,12 @@ def precalculeaza():
 # ---------- rute ----------
 
 def _out(plan):
-    return {**_public(plan), "surse": _state["surse"], "evenimente": _state["evenimente"],
-            "facute": sorted(_state["facute"])}     # opririle bifate azi, pentru progresul camioanelor
+    # incarcare_acum_l = cati litri are camionul acum (de la ultima descarcare), pentru dispecer
+    routes = [{**r, "incarcare_acum_l": _state["incarcare"].get(r["truck"], 0)} for r in plan["routes"]]
+    return {**_public(plan), "routes": routes, "surse": _state["surse"], "evenimente": _state["evenimente"],
+            "facute": sorted(_state["facute"]),     # opririle bifate azi, pentru progresul camioanelor
+            "capacitate_l": engine.TRUCK_CAPACITY_L,
+            "groapa": {k: engine.GROAPA[k] for k in ("lat", "lng", "nume")}}
 
 
 @router.get("/rute")
@@ -568,7 +593,7 @@ def reset_demo():
                                 [(round(b["fill_level"] * 100), b["id"]) for b in SIM.values()])
         conn.execute("DELETE FROM rutare_golire WHERE bin_id = ANY(%s)", (list(SIM),))
         conn.execute("DELETE FROM rutare_alerte")   # punctele depozitarilor dispar de pe harta
-        _state.update(plan=None, facute=set(), evenimente=[], pozitii={})
+        _state.update(plan=None, facute=set(), evenimente=[], pozitii={}, incarcare={})
         return _out(_build_plan(conn))
 
 
@@ -599,9 +624,8 @@ def golita(bin_id: str, date: dict | None = Depends(cere_rol("sofer", "admin")))
         conn.execute("""INSERT INTO rutare_golire (bin_id, golita_la) VALUES (%s, now())
                         ON CONFLICT (bin_id) DO UPDATE SET golita_la = EXCLUDED.golita_la""", (bin_id,))
         _state["urgent"][bin_id] = False
-        _state["facute"].add(bin_id)
+        _bifeaza(bin_id)
         _event({"id": bin_id, "status": "golita"})
-        _dupa_bifare(bin_id)
     return {"status": "ok"}
 
 
@@ -613,17 +637,46 @@ def _reordoneaza_camion(truck):
     poz = _state["pozitii"].get(truck)
     proaspat = poz and (datetime.now(timezone.utc) - datetime.fromisoformat(poz["la"])).total_seconds() < 120
     try:
-        engine.reordoneaza(plan, truck, _state["facute"], (poz["lat"], poz["lng"]) if proaspat else None)
+        engine.reordoneaza(plan, truck, _state["facute"], (poz["lat"], poz["lng"]) if proaspat else None,
+                           incarcat=_state["incarcare"].get(truck, 0))
     except Exception as e:          # reordonarea e un bonus: daca pica, ruta ramane cum era
         print("rutare: reordonarea a esuat:", e)
 
 
-def _dupa_bifare(sid):
-    """Soferul a bifat o oprire: opririle ramase ale camionului lui se reordoneaza de unde e acum."""
+def _bifeaza(sid):
+    """O oprire e facuta (ghena golita, depozitare colectata, descarcare la groapa): ce e in camion
+    se actualizeaza, iar opririle ramase se reordoneaza de unde e acum (cu descarcarile refacute:
+    un camion plin merge intai la groapa)."""
+    if sid in _state["facute"]:
+        return                      # a doua bifare (reincercare) nu mai adauga nimic in camion
+    _state["facute"].add(sid)
     plan = _state["plan"]
     r = plan and next((x for x in plan["routes"] if sid in x["stops"]), None)
-    if r is not None:
-        _reordoneaza_camion(r["truck"])
+    if r is None:
+        return
+    t = r["truck"]
+    if engine.e_groapa(sid):
+        _state["incarcare"][t] = 0
+    else:
+        _state["incarcare"][t] = _state["incarcare"].get(t, 0) + plan.get("_vol", {}).get(sid, 0)
+    _reordoneaza_camion(t)
+
+
+@router.post("/opriri/{stop_id}/descarcat")
+def descarcat(stop_id: str, date: dict | None = Depends(cere_rol("sofer", "admin"))):
+    """Soferul a descarcat camionul la groapa: camionul e gol si continua traseul."""
+    if not engine.e_groapa(stop_id):
+        raise HTTPException(404, "Oprirea nu e o descărcare")
+    with _lock:
+        plan = _state["plan"]
+        if plan is None or not any(stop_id in r["stops"] for r in plan["routes"]):
+            if stop_id in _state["facute"]:
+                return {"status": "ok", "deja": True}   # reincercare dupa ce s-a salvat deja
+            raise HTTPException(404, "Descărcarea nu mai e pe nicio rută")
+        _verifica_oprire(date, stop_id)
+        _bifeaza(stop_id)
+        _event({"id": stop_id, "status": "descarcat"})
+    return {"status": "ok"}
 
 
 
@@ -678,7 +731,9 @@ def _inchide_disparute(conn, ids):
            WHERE id = ANY(%s) AND status IN ('deschisa', 'asignata') RETURNING id""", (list(ids),)).fetchall()]
     for aid in inchise:
         if _state["plan"] is not None:
-            engine.scoate_oprire(_state["plan"], aid)
+            t = engine.scoate_oprire(_state["plan"], aid)
+            if t is not None:
+                _reordoneaza_camion(t)     # poate nu mai e nevoie de o descarcare
         _event({"id": aid, "status": "disparuta"})
     return inchise
 
@@ -741,9 +796,8 @@ def alerta_colectata(alert_id: str, date: dict | None = Depends(cere_rol("sofer"
             return {"status": "ok", "deja": a["status"]}
         _verifica_oprire(date, alert_id)
         conn.execute("UPDATE rutare_alerte SET status = 'colectata', inchisa = now() WHERE id = %s", (alert_id,))
-        _state["facute"].add(alert_id)
+        _bifeaza(alert_id)
         _event({"id": alert_id, "status": "colectata"})
-        _dupa_bifare(alert_id)
     return {"status": "ok"}
 
 
@@ -850,13 +904,16 @@ def ruta_camion(camion: int):
         alerte = {a["id"]: a for a in plan["alerts"]}
         stops, geometrie, distanta = list(ruta["stops"]), ruta["geometry"], ruta["distance_m"]
         incarcare, facute = ruta["load_l"], set(_state["facute"])
+        in_camion = _state["incarcare"].get(camion, 0)
     info = _nume_ghene()                # numele si adresa ghenelor, din tabela lui Robert
     info = {**SIM, **info}              # ghenele simulate au numele strazii din sim_bins.json
     opriri = []
     for sid in stops:
         if sid == "depot":
             continue
-        if sid in alerte and alerte[sid].get("kind") == "alert":
+        if engine.e_groapa(sid):
+            opriri.append({**_oprire_groapa(sid), "facuta": sid in facute})
+        elif sid in alerte and alerte[sid].get("kind") == "alert":
             a = alerte[sid]
             opriri.append({"id": sid, "tip": "depozitare", "lat": a["lat"], "lng": a["lng"],
                            "nume": "Depozitare ilegală", "adresa": None, "facuta": sid in facute})
@@ -866,7 +923,13 @@ def ruta_camion(camion: int):
                            "nume": r.get("nume") or sid, "adresa": r.get("adresa"),
                            "umplere": b["umplere"], "facuta": sid in facute})
     return {"camion": camion, "distanta_m": distanta, "incarcare_l": incarcare, "opriri": opriri,
-            "traseu": geometrie}
+            "traseu": geometrie, "in_camion_l": in_camion, "capacitate_l": engine.TRUCK_CAPACITY_L}
+
+
+def _oprire_groapa(sid):
+    g = engine.GROAPA
+    return {"id": sid, "tip": "groapa", "nume": g["nume"], "adresa": g["adresa"],
+            "lat": float(g["lat"]), "lng": float(g["lng"])}
 
 
 @router.get("/navigatie/{camion}")
@@ -898,7 +961,9 @@ def navigatie(camion: int, lat: float | None = None, lng: float | None = None, d
     depou = (engine.DEPOT["lat"], engine.DEPOT["lng"])
     opriri, start, start_loc = [], depou, locuri.get("depot")
     for sid in stops:
-        if sid in alerte and alerte[sid].get("kind") == "alert":
+        if engine.e_groapa(sid):
+            o = _oprire_groapa(sid)
+        elif sid in alerte and alerte[sid].get("kind") == "alert":
             a = alerte[sid]
             o = {"id": sid, "tip": "depozitare", "nume": "Depozitare ilegală", "adresa": None,
                  "lat": float(a["lat"]), "lng": float(a["lng"])}

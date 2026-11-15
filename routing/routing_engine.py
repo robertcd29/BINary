@@ -26,7 +26,7 @@ DEPOT = {"lat": 45.7547817, "lng": 21.2506284}   # punctul de plecare al camioan
 NUM_TRUCKS = 6
 TRUCK_CAPACITY_L = 8000
 RESERVE = 0.10
-MANDATORY_FILL = 0.85            # la fel ca rosul de pe harta (peste 85%)
+MANDATORY_FILL = 0.55            # de la 55% in sus ghena se colecteaza sigur (si intra din mers in ruta)
 MIN_FILL = 0.3                   # sub acest prag pubela nu merita drumul (afara de risc de revarsare)
 HORIZON_H = 24
 PENALTY_SCALE = 4000             # ocolul acceptat (m) pentru o pubela optionala = PENALTY_SCALE * umplere^2
@@ -36,6 +36,11 @@ MAX_SNAP_M = 300                 # peste aceasta distanta, punctul e in afara ha
 SOLVER_SECONDS = 3               # suficient pentru ~60 de pubele; 30 pentru cifre de pitch
 BASELINE_SECONDS = 5             # referinta e doar prima solutie, gata in sub o secunda
 ALERT_SIZES_L = {"mica": 100, "medie": 500, "mare": 1500}   # raportari de la cetateni
+# unde descarca un camion plin (statia de descarcare / drumul spre groapa de gunoi); trebuie sa fie in harta.
+# Capatul de nord al Caii Torontalului, spre iesirea din oras: de inlocuit cu locul real, daca e altul.
+GROAPA = {"lat": 45.7846838, "lng": 21.2019655, "nume": "Groapa de gunoi", "adresa": "Calea Torontalului, Timișoara"}
+CAPACITATE_UTILA_L = int(TRUCK_CAPACITY_L * (1 - RESERVE))   # peste atat camionul merge sa descarce
+MAX_CURSE = 3                    # de cate ori se poate umple un camion intr-o zi (cu descarcari intre ele)
 
 _G = ox.load_graphml(GRAPH_FILE)
 _baseline_cache = {}
@@ -674,11 +679,61 @@ def _solve(M, demands, groups, capacity, seconds, greedy=False, zone=None):
 
 def _empty_plan(depot, warnings):
     routes = [{"truck": v, "stops": ["depot", "depot"], "distance_m": 0, "load_l": 0,
-               "geometry": []} for v in range(NUM_TRUCKS)]
+               "geometry": [], "descarcari": 0} for v in range(NUM_TRUCKS)]
     return {"total_distance_m": 0, "routes": routes, "skipped": [], "predictions": {},
             "metrics": {"total_km": 0, "trucks_used": 0, "bins_total": 0, "bins_collected": 0,
                         "bins_skipped": 0, "overflows_prevented": 0},
-            "alerts": [], "warnings": warnings, "_stops": {"depot": depot}}
+            "alerts": [], "warnings": warnings, "_stops": {"depot": depot, "groapa": _snap(GROAPA["lat"], GROAPA["lng"])[0]},
+            "_vol": {}}
+
+
+# ---------- descarcari: camionul plin merge la groapa, apoi continua ----------
+
+def e_groapa(sid):
+    """Opririle de descarcare au id-ul "groapa-<camion>-<nr>"."""
+    return isinstance(sid, str) and sid.startswith("groapa")
+
+
+def _descarcari(ordine, vol, incarcat=0):
+    """Opririle in ordinea data, cu None (= mergi la groapa) inainte de oprirea care nu mai incape
+    in camion si la final, daca a ramas ceva in camion. incarcat = litrii deja in camion."""
+    out, load = [], incarcat
+    for s in ordine:
+        v = vol(s)
+        if load > 0 and load + v > CAPACITATE_UTILA_L:
+            out.append(None)
+            load = 0
+        out.append(s)
+        load += v
+    if load > 0:
+        out.append(None)
+    return out
+
+
+def _cu_descarcari(plan, truck, ordine, incarcat=0, nr=1):
+    """Ca _descarcari, pe id-uri: fiecare descarcare primeste id-ul ei, numerotat de la nr."""
+    st, vol = plan["_stops"], plan.setdefault("_vol", {})
+    out = []
+    for s in _descarcari(ordine, lambda x: vol.get(x, 0), incarcat):
+        if s is None:
+            s = f"groapa-{truck}-{nr}"
+            nr += 1
+            st[s] = st["groapa"]
+        out.append(s)
+    return out
+
+
+def _seteaza_ruta(plan, r, stops):
+    """Pune noua lista de opriri pe ruta si actualizeaza distanta, desenul si metricile."""
+    st = plan["_stops"]
+    noua = sum(_leg_m(st[a], st[b]) for a, b in zip(stops, stops[1:])) if len(stops) > 2 else 0
+    plan["total_distance_m"] += int(noua) - r["distance_m"]
+    r.update(stops=stops, geometry=_draw(plan, stops) if len(stops) > 2 else [], distance_m=int(noua),
+             descarcari=sum(1 for s in stops if e_groapa(s)))
+    m = plan["metrics"]
+    m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
+    if m.get("baseline_km"):
+        m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
 
 
 # ---------- API public ----------
@@ -733,18 +788,27 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
             penalty = 0                             # aproape goala: nu merita drumul
         groups.append((nodes, penalty))
 
-    capacity = int(TRUCK_CAPACITY_L * (1 - RESERVE))
     zone_idx = {n: [t for t in zone[b["id"]] if 0 <= t < NUM_TRUCKS]
                 for nodes, b in zip(nodes_of, used) if zone and b["id"] in zone for n in nodes}
-    routes, _, visited = _solve(M, demands, groups, capacity, seconds, zone=zone_idx)
+    routes, _, visited = _solve(M, demands, groups, CAPACITATE_UTILA_L, seconds, zone=zone_idx)
+    if any(b["id"] in mandatory and not visited & set(nodes) for nodes, b in zip(nodes_of, used)):
+        # ghenele obligatorii nu incap intr-o singura cursa: camioanele fac mai multe curse
+        # (cand se umplu merg la groapa si continua); solverul nu vede ocolul pana la groapa,
+        # deci il lasam sa faca asta doar cand chiar e nevoie
+        routes, _, visited = _solve(M, demands, groups, CAPACITATE_UTILA_L * MAX_CURSE, seconds, zone=zone_idx)
 
     # locul ales pentru fiecare pubela vizitata (sensul strazii); cele sarite raman pe varianta preferata
-    st = {"depot": depot, **{b["id"]: b["_stop"] for b in used}}
+    groapa, _ = _snap(GROAPA["lat"], GROAPA["lng"])
+    st = {"depot": depot, "groapa": groapa, **{b["id"]: b["_stop"] for b in used}}
     for n in visited:
         if n:
             st[ids[n]] = stops[n]
+    vol = {ids[n]: demands[n] for nodes in nodes_of for n in nodes}
+    tmp = {"_stops": st, "_vol": vol}
     for r in routes:
-        r["stops"] = [ids[i] for i in r["stops"]]
+        # descarcarile: inainte de ghena care nu mai incape si la final, inainte de depou
+        r["stops"] = ["depot"] + _cu_descarcari(tmp, r["truck"], [ids[i] for i in r["stops"][1:-1]]) + ["depot"]
+        r["descarcari"] = sum(1 for s in r["stops"] if e_groapa(s))
         r["distance_m"] = round(sum(_leg_m(st[a], st[b]) for a, b in zip(r["stops"], r["stops"][1:])))
         r["geometry"] = _geometry([st[x] for x in r["stops"]])
     total = sum(r["distance_m"] for r in routes)
@@ -769,9 +833,14 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         key = (tuple(ids), tuple(sorted((i, tuple(t)) for i, t in zone_idx.items())))
         if key not in _baseline_cache:
             base = _solve(M, demands, [(nodes, MANDATORY_PENALTY) for nodes in nodes_of],
-                          TRUCK_CAPACITY_L, BASELINE_SECONDS, greedy=True, zone=zone_idx)
-            _baseline_cache[key] = sum(_leg_m(stops[a], stops[b]) for r in base[0]
-                                       for a, b in zip(r["stops"], r["stops"][1:]))
+                          TRUCK_CAPACITY_L * MAX_CURSE, BASELINE_SECONDS, greedy=True, zone=zone_idx)
+            # si referinta merge la groapa cand se umple, ca sa comparam la fel
+            dist = 0
+            for r in base[0]:
+                pts = [stops[0]] + [groapa if n is None else stops[n]
+                                    for n in _descarcari(r["stops"][1:-1], lambda n: demands[n])] + [stops[0]]
+                dist += sum(_leg_m(a, b) for a, b in zip(pts, pts[1:]))
+            _baseline_cache[key] = dist
         metrics["baseline_km"] = round(_baseline_cache[key] / 1000, 2)
         metrics["saving_pct"] = round(100 * (1 - total / _baseline_cache[key]), 1)
 
@@ -784,6 +853,7 @@ def plan_routes(bins, history=None, compare_baseline=False, seconds=SOLVER_SECON
         "alerts": [],
         "warnings": warnings,
         "_stops": st,                            # intern: id -> locul de pe strada, pentru alerte si desen
+        "_vol": vol,                             # intern: id -> litrii colectati acolo, pentru descarcari
     }
 
 
@@ -795,7 +865,7 @@ def insertion_cost(plan, lat, lng, volume_l=0):
     st = plan["_stops"]
     costs = [_leg_m(st[s[k]], x) + _leg_m(x, st[s[k + 1]]) - _leg_m(st[s[k]], st[s[k + 1]])
              for x in variante
-             for r in plan["routes"] if r["load_l"] + volume_l <= TRUCK_CAPACITY_L
+             for r in plan["routes"] if r["load_l"] + volume_l <= CAPACITATE_UTILA_L * MAX_CURSE
              for s in [r["stops"]] for k in range(len(s) - 1)]
     return int(min(costs)) if costs else None
 
@@ -806,7 +876,8 @@ def add_alert(plan, alert, kind="alert"):
     kind="alert" pentru depozitari ilegale, kind="bin" pentru o pubela sarita care a devenit
     urgenta in timpul zilei (camioanele sunt deja pe drum, deci nu refacem tot planul).
     Modifica planul pe loc. Daca niciun camion nu are loc, punctul ramane "pending"
-    pentru urmatoarea planificare, in loc sa dea eroare.
+    pentru urmatoarea planificare, in loc sa dea eroare. Descarcarile de pe ruta nu se refac aici:
+    apelantul cheama reordoneaza(), care stie ce e deja in camion.
     """
     volume = alert.get("volum_l")
     if volume is None:
@@ -821,8 +892,8 @@ def add_alert(plan, alert, kind="alert"):
     st = plan["_stops"]
     best = None
     for r in plan["routes"]:
-        if r["load_l"] + volume > TRUCK_CAPACITY_L:
-            continue
+        if r["load_l"] + volume > CAPACITATE_UTILA_L * MAX_CURSE:
+            continue                     # camionul ar trebui sa se umple de prea multe ori azi
         if alert.get("camioane") and r["truck"] not in alert["camioane"]:
             continue                     # pubela dintr-o zona: doar camioanele zonei ei
         s = r["stops"]
@@ -846,6 +917,7 @@ def add_alert(plan, alert, kind="alert"):
     extra = _leg_m(a, x) + _leg_m(x, b) - _leg_m(a, b)     # metrii reali in plus
     dedicated = len(route["stops"]) == 2
     st[alert["id"]] = x
+    plan.setdefault("_vol", {})[alert["id"]] = volume
     route["stops"].insert(pos, alert["id"])
     route["geometry"] = _draw(plan, route["stops"])
     route["distance_m"] += int(extra)
@@ -864,68 +936,59 @@ def add_alert(plan, alert, kind="alert"):
     return result
 
 
-def reordoneaza(plan, truck, facute, start=None):
-    """Dupa ce soferul bifeaza o oprire, reordoneaza opririle ramase ale camionului pornind de unde e acum.
+def reordoneaza(plan, truck, facute, start=None, incarcat=0):
+    """Reordoneaza opririle ramase ale camionului pornind de unde e acum si reface descarcarile.
 
     Ordinea din planul de dimineata e optima pentru tot traseul pornit din depou; daca soferul
-    bifeaza mai devreme sau ia alt drum, urmatoarea oprire din lista poate sa nu mai fie cea mai
-    buna. start = (lat, lng) de la GPS (optional); fara el, pleaca de la ultima oprire facuta.
+    bifeaza mai devreme, ia alt drum sau apare o oprire noua, urmatoarea oprire din lista poate sa
+    nu mai fie cea mai buna. start = (lat, lng) de la GPS (optional); fara el, pleaca de la ultima
+    oprire facuta. incarcat = litrii deja in camion: daca nu mai incape urmatoarea oprire (sau e
+    plin), prima oprire devine groapa de gunoi.
     """
     r = next((x for x in plan["routes"] if x["truck"] == truck), None)
     if r is None:
         return
     st = plan["_stops"]
     facute_aici = [s for s in r["stops"] if s != "depot" and s in facute]
-    ramase = [s for s in r["stops"] if s != "depot" and s not in facute]
-    if len(ramase) < 2:
-        return
-    x = st[facute_aici[-1]] if facute_aici else st["depot"]
-    if start is not None:
-        gps, off = _snap(float(start[0]), float(start[1]))
-        if off <= MAX_SNAP_M:
-            x = gps
-    puncte = [x] + [st[s] for s in ramase] + [st["depot"]]
-    M = _matrix(puncte)
-    n = len(puncte)
-    manager = pywrapcp.RoutingIndexManager(n, 1, [0], [n - 1])   # pleaca de unde e, se termina la depou
-    routing = pywrapcp.RoutingModel(manager)
-    cb = routing.RegisterTransitCallback(lambda a, b: int(M[manager.IndexToNode(a)][manager.IndexToNode(b)]))
-    routing.SetArcCostEvaluatorOfAllVehicles(cb)
-    params = pywrapcp.DefaultRoutingSearchParameters()
-    params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-    params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    params.time_limit.FromMilliseconds(500)
-    sol = routing.SolveWithParameters(params)
-    if sol is None:
-        return
-    ordine, idx = [], sol.Value(routing.NextVar(routing.Start(0)))
-    while not routing.IsEnd(idx):
-        ordine.append(ramase[manager.IndexToNode(idx) - 1])
-        idx = sol.Value(routing.NextVar(idx))
-    stops = ["depot"] + facute_aici + ordine + ["depot"]
-    noua = sum(_leg_m(st[a], st[b]) for a, b in zip(stops, stops[1:]))
-    plan["total_distance_m"] += int(noua) - r["distance_m"]
-    r.update(stops=stops, geometry=_draw(plan, stops), distance_m=int(noua))
-    m = plan["metrics"]
-    m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
-    if m.get("baseline_km"):
-        m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
+    ramase = [s for s in r["stops"] if s != "depot" and s not in facute and not e_groapa(s)]
+    ordine = ramase
+    if len(ramase) >= 2:
+        x = st[facute_aici[-1]] if facute_aici else st["depot"]
+        if start is not None:
+            gps, off = _snap(float(start[0]), float(start[1]))
+            if off <= MAX_SNAP_M:
+                x = gps
+        puncte = [x] + [st[s] for s in ramase] + [st["depot"]]
+        M = _matrix(puncte)
+        n = len(puncte)
+        manager = pywrapcp.RoutingIndexManager(n, 1, [0], [n - 1])   # pleaca de unde e, se termina la depou
+        routing = pywrapcp.RoutingModel(manager)
+        cb = routing.RegisterTransitCallback(lambda a, b: int(M[manager.IndexToNode(a)][manager.IndexToNode(b)]))
+        routing.SetArcCostEvaluatorOfAllVehicles(cb)
+        params = pywrapcp.DefaultRoutingSearchParameters()
+        params.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+        params.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+        params.time_limit.FromMilliseconds(500)
+        sol = routing.SolveWithParameters(params)
+        if sol is not None:
+            ordine, idx = [], sol.Value(routing.NextVar(routing.Start(0)))
+            while not routing.IsEnd(idx):
+                ordine.append(ramase[manager.IndexToNode(idx) - 1])
+                idx = sol.Value(routing.NextVar(idx))
+    # descarcarile facute raman cu id-ul lor; cele noi se numeroteaza dupa ele
+    nr = 1 + max([int(s.rsplit("-", 1)[1]) for s in facute_aici if e_groapa(s)], default=0)
+    _seteaza_ruta(plan, r, ["depot"] + facute_aici + _cu_descarcari(plan, truck, ordine, incarcat, nr) + ["depot"])
 
 
 def scoate_oprire(plan, sid):
-    """Scoate o oprire din ruta (de exemplu o depozitare care a disparut), fara sa o considere facuta."""
+    """Scoate o oprire din ruta (de exemplu o depozitare care a disparut), fara sa o considere facuta.
+    Intoarce camionul de pe a carui ruta a iesit (None daca nu era pe nicio ruta)."""
     for a in plan.get("alerts", []):
         if a["id"] == sid:
             a["status"] = "gone"
     r = next((x for x in plan["routes"] if sid in x["stops"]), None)
     if r is None:
-        return
-    st = plan["_stops"]
-    stops = [s for s in r["stops"] if s != sid]
-    noua = sum(_leg_m(st[a], st[b]) for a, b in zip(stops, stops[1:])) if len(stops) > 2 else 0
-    plan["total_distance_m"] += int(noua) - r["distance_m"]
-    r.update(stops=stops, geometry=_draw(plan, stops) if len(stops) > 2 else [], distance_m=int(noua))
-    m = plan["metrics"]
-    m["total_km"] = round(plan["total_distance_m"] / 1000, 2)
-    if m.get("baseline_km"):
-        m["saving_pct"] = round(100 * (1 - m["total_km"] / m["baseline_km"]), 1)
+        return None
+    _seteaza_ruta(plan, r, [s for s in r["stops"] if s != sid])
+    r["load_l"] -= plan.get("_vol", {}).pop(sid, 0)
+    return r["truck"]               # apelantul reface descarcarile cu reordoneaza()

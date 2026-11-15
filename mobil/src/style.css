@@ -785,6 +785,7 @@ body.nav-active { overflow: hidden; }
 
 .dest-badge.depozitare { color: var(--dump); background: #fbe6ee; }
 .dest-badge.depou { color: var(--ink); background: var(--line-2); }
+.dest-badge.groapa { color: #6b4f2a; background: #f1e8da; }
 .map-panel .nav-destination small { color: var(--ink-2); }
 .map-panel .nav-actions { padding: 10px 16px 4px; }
 .driver.fullscreen .secondary-button,

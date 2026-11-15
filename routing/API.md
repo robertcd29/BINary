@@ -57,6 +57,9 @@ Ruta zilei pentru un camion, cu opririle deja în ordine.
 ```
 `traseu` = linia de desenat pe hartă (puncte `[lat, lng]`).
 
+Opririle pot include și `{ "id": "groapa-0-1", "tip": "groapa", ... }`: camionul se umple, merge să descarce la groapa de gunoi, apoi continuă traseul (ultima descărcare e mereu înainte de depou). `in_camion_l` / `capacitate_l` = cât are camionul acum, de la ultima descărcare.
+Ghenele de la 55% în sus se colectează sigur; una care trece de 55% în timpul zilei intră singură pe ruta camionului zonei ei, iar opririle rămase se reordonează de unde e camionul.
+
 ### `POST /pozitie`  — NOU
 Aplicația o trimite la fiecare ~10 secunde, cât timp șoferul e pe traseu.
 ```json
@@ -70,6 +73,9 @@ Răspuns: `{ "status": "ok" }`
 ### `POST /alerte/{id}/colectata`  — există
 Șoferul apasă „colectată” la o depozitare ilegală. Fără body. Răspuns: `{ "status": "ok" }`.
 Dacă alerta era deja închisă (a doua apăsare, sau camera a văzut înainte că locul e curat), răspunsul e tot `ok`, cu `"deja": "colectata" | "disparuta"`.
+
+### `POST /api/opriri/{id}/descarcat`  — NOU
+Șoferul apasă „Am descărcat” la o oprire `groapa-…`. Fără body. Camionul e gol din nou, iar opririle rămase se reordonează. Răspuns: `{ "status": "ok" }`.
 
 ---
 
