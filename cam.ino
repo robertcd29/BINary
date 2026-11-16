@@ -5,8 +5,8 @@
 #include <WebServer.h>
 
 // WiFi
-const char* ssid = "net";
-const char* password = "mihaimihai12345";
+const char* ssid = "";
+const char* password = "";
 
 // Raspberry Pi - hotspot
 const char* serverUrl = "http://172.20.10.2:5000/api/image";
