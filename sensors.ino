@@ -4,8 +4,8 @@
 #include <math.h>
 
 // Wi-Fi - Hotspot iPhone
-const char* ssid = "net";
-const char* password = "mihaimihai12345";
+const char* ssid = "";
+const char* password = "";
 
 // Raspberry Pi
 const char* serverURL = "http://172.20.10.2:5000/api/sensors";
