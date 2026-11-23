@@ -3,3 +3,6 @@ venv/
 ghene.db
 __pycache__/
 .DS_Store
+
+# Secrete locale (firmware)
+secrets.h
