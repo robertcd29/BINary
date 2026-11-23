@@ -4,16 +4,21 @@ from datetime import datetime
 import threading
 import requests
 import time
+import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
 app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024
 
 # Adresa serverului Dariei
-DARIA_URL = "http://172.20.10.7:8000/detect"
+DARIA_URL = os.environ["DARIA_URL"]
 
 # Adresa serverului principal - endpoint-ul pentru masuratori
-MAIN_SERVER_URL = "http://13.61.25.234:8000/masuratori"
+MAIN_SERVER_URL = os.environ["MAIN_SERVER_URL"]
 
 # Corespondenta dintre senzorii Raspberry si pubelele din baza de date
 BIN_IDS = {

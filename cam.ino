@@ -3,13 +3,14 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <WebServer.h>
+#include "secrets.h"   // copiaza secrets.example.h in secrets.h si completeaza
 
 // WiFi
-const char* ssid = "";
-const char* password = "";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
 // Raspberry Pi - hotspot
-const char* serverUrl = "http://172.20.10.2:5000/api/image";
+const char* serverUrl = "http://" PI_IP ":5000/api/image";
 
 // Camera AI Thinker
 #define PWDN_GPIO_NUM     32

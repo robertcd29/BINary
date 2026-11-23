@@ -6,3 +6,22 @@ venv/
 .venv/
 .DS_Store
 Thumbs.db
+
+# Secrete locale
+.env.*
+!.env.example
+secrets.h
+*.pem
+*.key
+*.p12
+id_rsa*
+id_ed25519*
+
+# Date locale
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+*.dump
+logs/
+captures/

@@ -2,14 +2,15 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <math.h>
+#include "secrets.h"   // copiaza secrets.example.h in secrets.h si completeaza
 
 // Wi-Fi - Hotspot iPhone
-const char* ssid = "";
-const char* password = "";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
 // Raspberry Pi
-const char* serverURL = "http://172.20.10.2:5000/api/sensors";
-const char* serverIP = "172.20.10.2";
+const char* serverURL = "http://" PI_IP ":5000/api/sensors";
+const char* serverIP = PI_IP;
 const int serverPort = 5000;
 
 // Pinii senzorilor
