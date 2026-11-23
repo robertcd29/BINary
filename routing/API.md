@@ -86,7 +86,7 @@ Dacă alerta era deja închisă (a doua apăsare, sau camera a văzut înainte c
 ---
 
 ## Camera (Daria)
-Adresa: `https://binary-tm.duckdns.org/api/...`. La un push pe `routing` serverul repornește și câteva secunde răspunde **502**: scriptul camerei reîncearcă (de ex. de 5 ori, la 2–3 s), nu raportează „backend indisponibil” de la prima încercare.
+Adresa: `https://your-server-address/api/...`. La un push pe `routing` serverul repornește și câteva secunde răspunde **502**: scriptul camerei reîncearcă (de ex. de 5 ori, la 2–3 s), nu raportează „backend indisponibil” de la prima încercare.
 
 ### `POST /api/alerte` — camera vede gunoi
 ```json
